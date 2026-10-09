@@ -316,6 +316,13 @@
         </div>
       </div>
 
+      <!-- Floating Canvas Controls for Mobile/Tablet -->
+      <div class="mobile-canvas-controls" id="mobileCanvasControls">
+        <button class="m-zoom-btn" id="mBtnZoomOut" title="Zoom Out">−</button>
+        <button class="m-zoom-btn m-zoom-fit" id="mBtnZoomFit" title="Fit to Screen"><span id="mZoomVal">Fit</span></button>
+        <button class="m-zoom-btn" id="mBtnZoomIn" title="Zoom In">+</button>
+      </div>
+
       <!-- Speaker Notes Collapsible Drawer -->
       <div class="speaker-notes-drawer collapsed" id="speakerNotesDrawer">
         <div class="drawer-header" id="notesDrawerHeader">
@@ -837,6 +844,44 @@
   </div>
 
   <!-- MODALS -->
+
+  <!-- Modal 0: Mobile Insert Action Sheet -->
+  <div class="modal-backdrop" id="modalMobileInsert" style="display: none;">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3 class="modal-title">Insert into Slide</h3>
+        <button class="modal-close-btn" data-close="modalMobileInsert">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="mobile-insert-grid">
+          <button class="mobile-insert-card" id="mInsertSlide">
+            <span class="m-ins-icon">➕</span>
+            <span class="m-ins-text">New Slide (Preset)</span>
+          </button>
+          <button class="mobile-insert-card" id="mInsertText">
+            <span class="m-ins-icon">🔤</span>
+            <span class="m-ins-text">Text Box</span>
+          </button>
+          <button class="mobile-insert-card" id="mInsertShape">
+            <span class="m-ins-icon">🔷</span>
+            <span class="m-ins-text">Shape</span>
+          </button>
+          <button class="mobile-insert-card" id="mInsertImage">
+            <span class="m-ins-icon">🖼️</span>
+            <span class="m-ins-text">Image</span>
+          </button>
+          <button class="mobile-insert-card" id="mInsertVideo">
+            <span class="m-ins-icon">🎬</span>
+            <span class="m-ins-text">Video</span>
+          </button>
+          <button class="mobile-insert-card" id="mInsertAudio">
+            <span class="m-ins-icon">🎵</span>
+            <span class="m-ins-text">Audio</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal 1: Layout Presets Picker -->
   <div class="modal-backdrop" id="modalLayoutPicker" style="display: none;">

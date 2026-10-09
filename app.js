@@ -1791,6 +1791,13 @@
           this.currentSlideIndex = idx;
           this.selectedElementIds = [];
           this.renderAll();
+          if (window.innerWidth <= 900) {
+            const sidebar = document.getElementById('sidebarSlides');
+            const backdrop = document.getElementById('mobileDrawerBackdrop');
+            if (sidebar) sidebar.classList.remove('mobile-open');
+            if (backdrop) backdrop.classList.remove('active');
+            document.querySelectorAll('.mobile-nav-btn').forEach((b) => b.classList.remove('active'));
+          }
         });
 
         listEl.appendChild(card);
@@ -2336,6 +2343,9 @@
       if (zoomText) zoomText.textContent = `${Math.round(this.zoom * 100)}%`;
       if (zoomSlider) zoomSlider.value = Math.round(this.zoom * 100);
 
+      const mZoomVal = document.getElementById('mZoomVal');
+      if (mZoomVal) mZoomVal.textContent = `${Math.round(this.zoom * 100)}%`;
+
       const mobileBadge = document.getElementById('mobileFormatBadge');
       if (mobileBadge) {
         mobileBadge.classList.toggle('show', this.selectedElementIds.length > 0);
@@ -2360,9 +2370,10 @@
     fitCanvasToViewport() {
       const container = document.getElementById('canvasScrollContainer');
       const canvasEl = document.getElementById('slideCanvas');
+      const wrapper = document.getElementById('canvasScaleWrapper');
       if (!container || !canvasEl) return;
 
-      const isMobile = window.innerWidth <= 768;
+      const isMobile = window.innerWidth <= 900;
       const padX = isMobile ? 16 : 80;
       const padY = isMobile ? 16 : 80;
 
@@ -2375,17 +2386,26 @@
       const scaleY = availH / CANVAS_HEIGHT;
       const fitScale = Math.min(scaleX, scaleY, 1.2);
 
-      this.zoom = Math.max(0.12, fitScale);
+      this.zoom = Math.max(0.08, fitScale);
       canvasEl.style.transform = `scale(${this.zoom})`;
+      if (wrapper) {
+        wrapper.style.width = `${Math.round(CANVAS_WIDTH * this.zoom)}px`;
+        wrapper.style.height = `${Math.round(CANVAS_HEIGHT * this.zoom)}px`;
+      }
       this.updateStatusBar();
     }
 
     setCustomZoom(level) {
       this.autoFitZoom = false;
-      this.zoom = Math.max(0.25, Math.min(2.5, level));
+      this.zoom = Math.max(0.1, Math.min(2.5, level));
       const canvasEl = document.getElementById('slideCanvas');
+      const wrapper = document.getElementById('canvasScaleWrapper');
       if (canvasEl) {
         canvasEl.style.transform = `scale(${this.zoom})`;
+      }
+      if (wrapper) {
+        wrapper.style.width = `${Math.round(CANVAS_WIDTH * this.zoom)}px`;
+        wrapper.style.height = `${Math.round(CANVAS_HEIGHT * this.zoom)}px`;
       }
       this.updateStatusBar();
     }
@@ -2510,6 +2530,68 @@
           this.enableInPlaceTextEditing(elDom, el);
         }
       });
+
+      // Mobile Touch Double-Tap for Text Editing
+      let lastTouchTime = 0;
+      canvasEl.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTouchTime < 320 && now - lastTouchTime > 40) {
+          const elDom = e.target.closest('.slide-element');
+          if (elDom) {
+            const elId = elDom.dataset.id;
+            const slide = this.getCurrentSlide();
+            const el = slide ? slide.elements.find((item) => item.id === elId) : null;
+            if (el && el.type === 'text') {
+              this.enableInPlaceTextEditing(elDom, el);
+            }
+          }
+        }
+        lastTouchTime = now;
+      }, { passive: true });
+
+      // Touch Pinch-to-Zoom on Canvas Container
+      const scrollContainer = document.getElementById('canvasScrollContainer');
+      if (scrollContainer) {
+        let initialPinchDistance = null;
+        let initialPinchZoom = null;
+
+        scrollContainer.addEventListener('touchstart', (e) => {
+          if (e.touches && e.touches.length === 2) {
+            initialPinchDistance = Math.hypot(
+              e.touches[0].clientX - e.touches[1].clientX,
+              e.touches[0].clientY - e.touches[1].clientY
+            );
+            initialPinchZoom = this.zoom;
+          }
+        }, { passive: true });
+
+        scrollContainer.addEventListener('touchmove', (e) => {
+          if (e.touches && e.touches.length === 2 && initialPinchDistance && initialPinchZoom) {
+            const currentDistance = Math.hypot(
+              e.touches[0].clientX - e.touches[1].clientX,
+              e.touches[0].clientY - e.touches[1].clientY
+            );
+            const factor = currentDistance / initialPinchDistance;
+            this.setCustomZoom(initialPinchZoom * factor);
+          }
+        }, { passive: true });
+
+        scrollContainer.addEventListener('touchend', (e) => {
+          if (!e.touches || e.touches.length < 2) {
+            initialPinchDistance = null;
+            initialPinchZoom = null;
+          }
+        }, { passive: true });
+
+        // Mouse Wheel & Trackpad Pinch Zoom (Ctrl+Wheel)
+        scrollContainer.addEventListener('wheel', (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const factor = e.deltaY > 0 ? 0.92 : 1.08;
+            this.setCustomZoom(this.zoom * factor);
+          }
+        }, { passive: false });
+      }
     }
 
     enableInPlaceTextEditing(elDom, el) {
@@ -3630,7 +3712,77 @@
       if (btnMobileInsert) {
         btnMobileInsert.onclick = () => {
           closeAllMobileDrawers();
+          const modalInsert = document.getElementById('modalMobileInsert');
+          if (modalInsert) {
+            modalInsert.style.display = 'flex';
+          } else {
+            document.getElementById('modalLayoutPicker').style.display = 'flex';
+          }
+        };
+      }
+
+      // Modal Mobile Insert Action Sheet items
+      const closeMobileInsertModal = () => {
+        const m = document.getElementById('modalMobileInsert');
+        if (m) m.style.display = 'none';
+      };
+      const mInsertSlide = document.getElementById('mInsertSlide');
+      if (mInsertSlide) {
+        mInsertSlide.onclick = () => {
+          closeMobileInsertModal();
           document.getElementById('modalLayoutPicker').style.display = 'flex';
+        };
+      }
+      const mInsertText = document.getElementById('mInsertText');
+      if (mInsertText) {
+        mInsertText.onclick = () => {
+          closeMobileInsertModal();
+          this.insertTextBox();
+        };
+      }
+      const mInsertShape = document.getElementById('mInsertShape');
+      if (mInsertShape) {
+        mInsertShape.onclick = () => {
+          closeMobileInsertModal();
+          this.insertShape('rect');
+        };
+      }
+      const mInsertImage = document.getElementById('mInsertImage');
+      if (mInsertImage) {
+        mInsertImage.onclick = () => {
+          closeMobileInsertModal();
+          document.getElementById('hiddenSingleImageInput').click();
+        };
+      }
+      const mInsertVideo = document.getElementById('mInsertVideo');
+      if (mInsertVideo) {
+        mInsertVideo.onclick = () => {
+          closeMobileInsertModal();
+          document.getElementById('hiddenSingleVideoInput').click();
+        };
+      }
+      const mInsertAudio = document.getElementById('mInsertAudio');
+      if (mInsertAudio) {
+        mInsertAudio.onclick = () => {
+          closeMobileInsertModal();
+          document.getElementById('hiddenSingleAudioInput').click();
+        };
+      }
+
+      // Floating Mobile Canvas Controls
+      const mBtnZoomOut = document.getElementById('mBtnZoomOut');
+      if (mBtnZoomOut) {
+        mBtnZoomOut.onclick = () => this.setCustomZoom(this.zoom - 0.15);
+      }
+      const mBtnZoomIn = document.getElementById('mBtnZoomIn');
+      if (mBtnZoomIn) {
+        mBtnZoomIn.onclick = () => this.setCustomZoom(this.zoom + 0.15);
+      }
+      const mBtnZoomFit = document.getElementById('mBtnZoomFit');
+      if (mBtnZoomFit) {
+        mBtnZoomFit.onclick = () => {
+          this.autoFitZoom = true;
+          this.fitCanvasToViewport();
         };
       }
 
@@ -3758,10 +3910,27 @@
       // Shapes dropdown palette
       const shapesBtn = document.getElementById('ribbonShapesBtn');
       const shapesPalette = document.getElementById('shapesPalette');
-      shapesBtn.onclick = (e) => {
-        e.stopPropagation();
-        shapesPalette.classList.toggle('show');
-      };
+      if (shapesBtn && shapesPalette) {
+        shapesBtn.onclick = (e) => {
+          e.stopPropagation();
+          const isOpen = shapesPalette.classList.contains('show');
+          if (isOpen) {
+            shapesPalette.classList.remove('show');
+          } else {
+            const rect = shapesBtn.getBoundingClientRect();
+            shapesPalette.style.position = 'fixed';
+            shapesPalette.style.top = `${rect.bottom + 4}px`;
+            shapesPalette.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 200))}px`;
+            shapesPalette.style.zIndex = '5500';
+            shapesPalette.classList.add('show');
+          }
+        };
+        window.addEventListener('click', (e) => {
+          if (!e.target.closest('#ribbonShapesBtn') && !e.target.closest('#shapesPalette')) {
+            shapesPalette.classList.remove('show');
+          }
+        });
+      }
 
       document.querySelectorAll('.shape-pick-btn').forEach((btn) => {
         btn.onclick = (e) => {
