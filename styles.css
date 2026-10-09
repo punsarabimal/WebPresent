@@ -562,8 +562,8 @@ button {
 .canvas-scroll-container {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: safe center;
+  justify-content: safe center;
   overflow: auto;
   position: relative;
   padding: 40px;
@@ -2111,6 +2111,8 @@ video.element-inner-media, audio.element-inner-media {
     padding: 12px 8px;
     touch-action: pan-x pan-y;
     -webkit-overflow-scrolling: touch;
+    align-items: safe center;
+    justify-content: safe center;
   }
 
   /* Off-canvas Slides Sidebar on Mobile */

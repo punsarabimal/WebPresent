@@ -949,6 +949,13 @@
       this.bindUI();
       this.setupCanvasResizeObserver();
       this.renderAll();
+      this.fitCanvasToViewport();
+      requestAnimationFrame(() => {
+        this.fitCanvasToViewport();
+      });
+      setTimeout(() => {
+        this.fitCanvasToViewport();
+      }, 50);
       this.showToast('SlideCraft Studio initialized with local persistence', 'info');
     }
 
@@ -1677,6 +1684,9 @@
       this.renderSpeakerNotes();
       this.renderInspector();
       this.updateStatusBar();
+      if (this.autoFitZoom) {
+        this.fitCanvasToViewport();
+      }
     }
 
     renderHeaderTitle() {
@@ -2365,6 +2375,21 @@
         }
       });
       ro.observe(container);
+
+      window.addEventListener('resize', () => {
+        if (this.autoFitZoom) {
+          this.fitCanvasToViewport();
+        }
+        if (this.isPresentationActive) {
+          this.renderPresentationSlide();
+        }
+      });
+
+      document.addEventListener('fullscreenchange', () => {
+        if (this.isPresentationActive) {
+          this.renderPresentationSlide();
+        }
+      });
     }
 
     fitCanvasToViewport() {
@@ -2374,8 +2399,8 @@
       if (!container || !canvasEl) return;
 
       const isMobile = window.innerWidth <= 900;
-      const padX = isMobile ? 16 : 80;
-      const padY = isMobile ? 16 : 80;
+      const padX = isMobile ? 16 : 48;
+      const padY = isMobile ? 16 : 48;
 
       const availW = container.clientWidth - padX;
       const availH = container.clientHeight - padY;
@@ -2392,6 +2417,8 @@
         wrapper.style.width = `${Math.round(CANVAS_WIDTH * this.zoom)}px`;
         wrapper.style.height = `${Math.round(CANVAS_HEIGHT * this.zoom)}px`;
       }
+      container.scrollLeft = 0;
+      container.scrollTop = 0;
       this.updateStatusBar();
     }
 
@@ -2567,6 +2594,7 @@
 
         scrollContainer.addEventListener('touchmove', (e) => {
           if (e.touches && e.touches.length === 2 && initialPinchDistance && initialPinchZoom) {
+            e.preventDefault();
             const currentDistance = Math.hypot(
               e.touches[0].clientX - e.touches[1].clientX,
               e.touches[0].clientY - e.touches[1].clientY
@@ -2574,7 +2602,7 @@
             const factor = currentDistance / initialPinchDistance;
             this.setCustomZoom(initialPinchZoom * factor);
           }
-        }, { passive: true });
+        }, { passive: false });
 
         scrollContainer.addEventListener('touchend', (e) => {
           if (!e.touches || e.touches.length < 2) {
@@ -4033,6 +4061,9 @@
         if (!drawer) return;
         drawer.classList.toggle('collapsed');
         if (btn) btn.textContent = drawer.classList.contains('collapsed') ? '▲ Expand' : '▼ Collapse';
+        setTimeout(() => {
+          if (this.autoFitZoom) this.fitCanvasToViewport();
+        }, 220);
       };
 
       document.getElementById('notesDrawerHeader').onclick = toggleNotesDrawer;
@@ -4499,9 +4530,15 @@
   // =========================================================================
   // INITIALIZE APP ON DOM READY
   // =========================================================================
-  window.addEventListener('DOMContentLoaded', () => {
+  const bootstrapApp = () => {
     const app = new SlideCraftApp();
     app.init();
     window.SlideCraft = app; // Expose for testing & console interaction
-  });
+  };
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', bootstrapApp);
+  } else {
+    bootstrapApp();
+  }
 })();
