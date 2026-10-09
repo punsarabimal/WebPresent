@@ -2335,6 +2335,11 @@
 
       if (zoomText) zoomText.textContent = `${Math.round(this.zoom * 100)}%`;
       if (zoomSlider) zoomSlider.value = Math.round(this.zoom * 100);
+
+      const mobileBadge = document.getElementById('mobileFormatBadge');
+      if (mobileBadge) {
+        mobileBadge.classList.toggle('show', this.selectedElementIds.length > 0);
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -2357,8 +2362,12 @@
       const canvasEl = document.getElementById('slideCanvas');
       if (!container || !canvasEl) return;
 
-      const availW = container.clientWidth - 80;
-      const availH = container.clientHeight - 80;
+      const isMobile = window.innerWidth <= 768;
+      const padX = isMobile ? 16 : 80;
+      const padY = isMobile ? 16 : 80;
+
+      const availW = container.clientWidth - padX;
+      const availH = container.clientHeight - padY;
 
       if (availW <= 0 || availH <= 0) return;
 
@@ -2366,7 +2375,7 @@
       const scaleY = availH / CANVAS_HEIGHT;
       const fitScale = Math.min(scaleX, scaleY, 1.2);
 
-      this.zoom = Math.max(0.2, fitScale);
+      this.zoom = Math.max(0.12, fitScale);
       canvasEl.style.transform = `scale(${this.zoom})`;
       this.updateStatusBar();
     }
@@ -3071,6 +3080,38 @@
         };
       }
 
+      // Touch swipe gestures on mobile & tablet
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchStartTime = 0;
+
+      overlay.ontouchstart = (e) => {
+        if (e.touches && e.touches[0]) {
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+          touchStartTime = Date.now();
+        }
+      };
+
+      overlay.ontouchend = (e) => {
+        if (e.changedTouches && e.changedTouches[0]) {
+          const deltaX = e.changedTouches[0].clientX - touchStartX;
+          const deltaY = e.changedTouches[0].clientY - touchStartY;
+          const elapsedTime = Date.now() - touchStartTime;
+
+          // Horizontal swipe detection (> 45px, mostly horizontal)
+          if (elapsedTime < 500 && Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
+            if (deltaX < 0) {
+              // Swipe left -> advance
+              this.advancePresentation();
+            } else {
+              // Swipe right -> previous
+              this.previousPresentation();
+            }
+          }
+        }
+      };
+
       // Laser pointer tracker
       const laser = document.getElementById('presentationLaser');
       viewport.onmousemove = (e) => {
@@ -3196,6 +3237,82 @@
         });
 
         grid.appendChild(card);
+      });
+    }
+
+    async renderProjectsManager() {
+      const container = document.getElementById('projectsManagerList');
+      if (!container) return;
+      container.innerHTML = '<p class="pane-help-text">Loading saved presentations...</p>';
+
+      const projects = await this.storage.getAllProjects();
+      if (projects.length === 0) {
+        container.innerHTML =
+          '<p class="pane-help-text">No saved presentations in browser storage yet. Click "Create New Presentation" to start a new deck.</p>';
+        return;
+      }
+
+      container.innerHTML = '';
+      projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+      projects.forEach((proj) => {
+        const card = document.createElement('div');
+        card.className = 'project-item-card';
+
+        const updatedDate = proj.updatedAt
+          ? new Date(proj.updatedAt).toLocaleString()
+          : 'Recently';
+        const slideCount = (proj.slides || []).length;
+        const isCurrent = this.project && this.project.id === proj.id;
+
+        card.innerHTML = `
+          <div>
+            <div class="project-item-title">${proj.title || 'Untitled'} ${
+              isCurrent ? '<span style="color:var(--primary-light); font-size:11px;">(Active)</span>' : ''
+            }</div>
+            <div class="project-item-meta">${slideCount} slides • Saved ${updatedDate}</div>
+          </div>
+          <div class="project-item-actions">
+            ${
+              !isCurrent
+                ? '<button class="prop-btn" data-act="open" style="padding:4px 10px; width:auto;">Open</button>'
+                : ''
+            }
+            <button class="prop-btn-secondary" data-act="dup" style="padding:4px 10px; width:auto;">Copy</button>
+            <button class="prop-btn-danger" data-act="del" style="padding:4px 10px; width:auto;">Delete</button>
+          </div>
+        `;
+
+        card.querySelectorAll('button').forEach((b) => {
+          b.onclick = async () => {
+            const act = b.dataset.act;
+            if (act === 'open') {
+              this.project = proj;
+              this.currentSlideIndex = 0;
+              this.selectedElementIds = [];
+              this.cacheInitialHistory();
+              this.renderAll();
+              document.getElementById('modalProjectManager').style.display = 'none';
+              this.showToast(`Opened "${proj.title}"`, 'success');
+            } else if (act === 'dup') {
+              const copy = JSON.parse(JSON.stringify(proj));
+              copy.id = 'proj_' + Math.random().toString(36).substring(2, 9);
+              copy.title = (copy.title || 'Presentation') + ' (Copy)';
+              copy.updatedAt = Date.now();
+              await this.storage.saveProject(copy);
+              this.renderProjectsManager();
+              this.showToast('Duplicated project', 'success');
+            } else if (act === 'del') {
+              if (confirm(`Delete presentation "${proj.title}"?`)) {
+                await this.storage.deleteProject(proj.id);
+                this.renderProjectsManager();
+                this.showToast('Presentation deleted', 'info');
+              }
+            }
+          };
+        });
+
+        container.appendChild(card);
       });
     }
 
@@ -3382,11 +3499,51 @@
         this.showToast('Created new presentation deck', 'success');
       };
 
+      const btnOpenManager = document.getElementById('btnOpenProjectManager');
+      if (btnOpenManager) {
+        btnOpenManager.onclick = () => {
+          this.renderProjectsManager();
+          document.getElementById('modalProjectManager').style.display = 'flex';
+        };
+      }
+
+      const btnCreateNewMgr = document.getElementById('btnCreateNewProjectFromManager');
+      if (btnCreateNewMgr) {
+        btnCreateNewMgr.onclick = () => {
+          this.project = createSampleProject();
+          this.currentSlideIndex = 0;
+          this.selectedElementIds = [];
+          this.cacheInitialHistory();
+          this.renderAll();
+          document.getElementById('modalProjectManager').style.display = 'none';
+          this.showToast('Created new presentation deck', 'success');
+        };
+      }
+
+      const btnImportMgr = document.getElementById('btnImportProjectFileFromManager');
+      if (btnImportMgr) {
+        btnImportMgr.onclick = () => {
+          document.getElementById('hiddenProjectJsonInput').click();
+          document.getElementById('modalProjectManager').style.display = 'none';
+        };
+      }
+
       document.getElementById('btnSave').onclick = async () => {
         await this.storage.saveProject(this.project);
         this.setSaveStatus('saved', 'Saved to browser');
         this.showToast('Presentation saved to browser storage', 'success');
       };
+
+      const btnSaveAsCopy = document.getElementById('btnSaveAsCopy');
+      if (btnSaveAsCopy) {
+        btnSaveAsCopy.onclick = async () => {
+          const copy = JSON.parse(JSON.stringify(this.project));
+          copy.id = 'proj_' + Math.random().toString(36).substring(2, 9);
+          copy.title = (this.project.title || 'Presentation') + ' (Copy)';
+          await this.storage.saveProject(copy);
+          this.showToast('Saved copy to browser storage', 'success');
+        };
+      }
 
       document.getElementById('btnExportJson').onclick = () => this.exportProjectJson();
       document.getElementById('btnExportBundle').onclick = () => this.exportProjectBundle();
@@ -3400,6 +3557,158 @@
       };
 
       document.getElementById('btnConnectMediaFolder').onclick = () => this.connectMediaFolder();
+
+      // Mobile Drawer and Bottom Nav Elements
+      const mobileNavDrawer = document.getElementById('mobileNavDrawer');
+      const mobileBackdrop = document.getElementById('mobileDrawerBackdrop');
+      const sidebarSlides = document.getElementById('sidebarSlides');
+      const sidebarInspector = document.getElementById('sidebarInspector');
+
+      const closeAllMobileDrawers = () => {
+        if (mobileNavDrawer) mobileNavDrawer.classList.remove('open');
+        if (sidebarSlides) sidebarSlides.classList.remove('mobile-open');
+        if (sidebarInspector) sidebarInspector.classList.remove('mobile-open');
+        if (mobileBackdrop) mobileBackdrop.classList.remove('active');
+        document.querySelectorAll('.mobile-nav-btn').forEach((b) => b.classList.remove('active'));
+      };
+
+      if (mobileBackdrop) {
+        mobileBackdrop.onclick = closeAllMobileDrawers;
+      }
+
+      // Mobile Menu Toggle Button (Hamburger)
+      const btnMobileMenuToggle = document.getElementById('btnMobileMenuToggle');
+      if (btnMobileMenuToggle) {
+        btnMobileMenuToggle.onclick = () => {
+          closeAllMobileDrawers();
+          if (mobileNavDrawer && mobileBackdrop) {
+            mobileNavDrawer.classList.add('open');
+            mobileBackdrop.classList.add('active');
+          }
+        };
+      }
+
+      const btnCloseMobileNav = document.getElementById('btnCloseMobileNav');
+      if (btnCloseMobileNav) btnCloseMobileNav.onclick = closeAllMobileDrawers;
+
+      // Mobile Bottom Nav: Slides Drawer Toggle
+      const btnMobileToggleSlides = document.getElementById('btnMobileToggleSlides');
+      if (btnMobileToggleSlides) {
+        btnMobileToggleSlides.onclick = () => {
+          const isOpen = sidebarSlides && sidebarSlides.classList.contains('mobile-open');
+          closeAllMobileDrawers();
+          if (!isOpen && sidebarSlides && mobileBackdrop) {
+            sidebarSlides.classList.add('mobile-open');
+            mobileBackdrop.classList.add('active');
+            btnMobileToggleSlides.classList.add('active');
+          }
+        };
+      }
+
+      const btnCloseMobileSlides = document.getElementById('btnCloseMobileSlides');
+      if (btnCloseMobileSlides) btnCloseMobileSlides.onclick = closeAllMobileDrawers;
+
+      // Mobile Bottom Nav: Format / Inspector Toggle
+      const btnMobileFormat = document.getElementById('btnMobileFormat');
+      if (btnMobileFormat) {
+        btnMobileFormat.onclick = () => {
+          const isOpen = sidebarInspector && sidebarInspector.classList.contains('mobile-open');
+          closeAllMobileDrawers();
+          if (!isOpen && sidebarInspector && mobileBackdrop) {
+            sidebarInspector.classList.add('mobile-open');
+            mobileBackdrop.classList.add('active');
+            btnMobileFormat.classList.add('active');
+          }
+        };
+      }
+
+      const btnCloseMobileInspector = document.getElementById('btnCloseMobileInspector');
+      if (btnCloseMobileInspector) btnCloseMobileInspector.onclick = closeAllMobileDrawers;
+
+      // Mobile Bottom Nav: Insert
+      const btnMobileInsert = document.getElementById('btnMobileInsert');
+      if (btnMobileInsert) {
+        btnMobileInsert.onclick = () => {
+          closeAllMobileDrawers();
+          document.getElementById('modalLayoutPicker').style.display = 'flex';
+        };
+      }
+
+      // Mobile Bottom Nav: Notes
+      const btnMobileNotes = document.getElementById('btnMobileNotes');
+      if (btnMobileNotes) {
+        btnMobileNotes.onclick = () => {
+          closeAllMobileDrawers();
+          const drawer = document.getElementById('speakerNotesDrawer');
+          if (drawer) {
+            drawer.classList.toggle('collapsed');
+          }
+        };
+      }
+
+      // Mobile Bottom Nav: Present
+      const btnMobilePresent = document.getElementById('btnMobilePresent');
+      if (btnMobilePresent) {
+        btnMobilePresent.onclick = () => {
+          closeAllMobileDrawers();
+          this.startPresentation(false);
+        };
+      }
+
+      // Mobile Nav Drawer action items
+      const bindMobileItem = (id, fn) => {
+        const item = document.getElementById(id);
+        if (item) {
+          item.onclick = () => {
+            closeAllMobileDrawers();
+            fn();
+          };
+        }
+      };
+
+      bindMobileItem('mBtnNew', () => {
+        this.project = createSampleProject();
+        this.currentSlideIndex = 0;
+        this.selectedElementIds = [];
+        this.cacheInitialHistory();
+        this.renderAll();
+        this.showToast('Created new presentation deck', 'success');
+      });
+      bindMobileItem('mBtnOpenManager', () => {
+        this.renderProjectsManager();
+        document.getElementById('modalProjectManager').style.display = 'flex';
+      });
+      bindMobileItem('mBtnSave', async () => {
+        await this.storage.saveProject(this.project);
+        this.setSaveStatus('saved', 'Saved to browser');
+        this.showToast('Presentation saved to browser', 'success');
+      });
+      bindMobileItem('mBtnImport', () => document.getElementById('hiddenProjectJsonInput').click());
+      bindMobileItem('mBtnExport', () => this.exportProjectJson());
+      bindMobileItem('mBtnExportBundle', () => this.exportProjectBundle());
+      bindMobileItem('mBtnPrint', () => this.printToPdf());
+      bindMobileItem('mBtnMediaFolder', () => {
+        this.renderMediaLibraryGrid();
+        document.getElementById('modalMediaLibrary').style.display = 'flex';
+      });
+      bindMobileItem('mBtnUndo', () => this.undo());
+      bindMobileItem('mBtnRedo', () => this.redo());
+      bindMobileItem('mBtnDuplicate', () => this.duplicateSelectedElements());
+      bindMobileItem('mBtnDelete', () => this.deleteSelectedElements());
+      bindMobileItem('mBtnShortcuts', () => {
+        document.getElementById('modalShortcuts').style.display = 'flex';
+      });
+
+      const mobileThemeSelect = document.getElementById('mobileThemeSelect');
+      if (mobileThemeSelect) {
+        mobileThemeSelect.value = (this.project && this.project.theme) || 'modern-dark';
+        mobileThemeSelect.onchange = (e) => {
+          this.project.theme = e.target.value;
+          this.updateDeckTheme();
+          this.pushHistory('Change deck theme');
+          closeAllMobileDrawers();
+        };
+      }
 
       // Undo / Redo
       document.getElementById('btnUndo').onclick = () => this.undo();

@@ -15,6 +15,14 @@
   <!-- Top Application Bar -->
   <header class="app-header">
     <div class="header-left">
+      <button class="mobile-menu-btn" id="btnMobileMenuToggle" title="Open Navigation Menu" aria-label="Open Navigation Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
       <div class="brand">
         <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor"/>
@@ -251,7 +259,10 @@
     <aside class="sidebar-slides" id="sidebarSlides">
       <div class="sidebar-header">
         <span class="sidebar-title">Slides (<span id="slideCountLabel">1</span>)</span>
-        <button class="btn-icon-small" id="btnAddSlideSidebar" title="Add Slide (Layout Preset)">➕</button>
+        <div class="sidebar-header-actions">
+          <button class="btn-icon-small" id="btnAddSlideSidebar" title="Add Slide (Layout Preset)">➕</button>
+          <button class="btn-close-drawer mobile-only" id="btnCloseMobileSlides" title="Close Slides">✕</button>
+        </div>
       </div>
 
       <div class="slides-thumbnail-list" id="slidesList">
@@ -325,6 +336,11 @@
 
     <!-- Right Sidebar: Contextual Inspector Panels -->
     <aside class="sidebar-inspector" id="sidebarInspector">
+      <div class="mobile-inspector-header">
+        <span class="mobile-inspector-title">Inspector & Formatting</span>
+        <button class="btn-close-drawer" id="btnCloseMobileInspector" title="Close Panel">✕</button>
+      </div>
+
       <!-- Tabs Header -->
       <div class="inspector-tabs">
         <button class="inspector-tab active" data-tab="properties" id="tabPropertiesBtn">Properties</button>
@@ -698,6 +714,91 @@
       </div>
     </div>
   </footer>
+
+  <!-- Mobile Bottom Quick Navigation Bar -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <button class="mobile-nav-btn" id="btnMobileToggleSlides" title="Slides Deck">
+      <span class="mobile-nav-icon">📑</span>
+      <span class="mobile-nav-label">Slides</span>
+    </button>
+    <button class="mobile-nav-btn" id="btnMobileInsert" title="Insert Objects">
+      <span class="mobile-nav-icon">➕</span>
+      <span class="mobile-nav-label">Insert</span>
+    </button>
+    <button class="mobile-nav-btn" id="btnMobileFormat" title="Format / Inspector">
+      <span class="mobile-nav-icon">🎨</span>
+      <span class="mobile-nav-label">Format</span>
+      <span class="mobile-badge-dot" id="mobileFormatBadge"></span>
+    </button>
+    <button class="mobile-nav-btn" id="btnMobileNotes" title="Speaker Notes">
+      <span class="mobile-nav-icon">📝</span>
+      <span class="mobile-nav-label">Notes</span>
+    </button>
+    <button class="mobile-nav-btn accent" id="btnMobilePresent" title="Present Slideshow">
+      <span class="mobile-nav-icon">▶️</span>
+      <span class="mobile-nav-label">Present</span>
+    </button>
+  </nav>
+
+  <!-- Mobile Drawer Backdrop Overlay -->
+  <div class="mobile-drawer-backdrop" id="mobileDrawerBackdrop"></div>
+
+  <!-- Mobile Slide-In Navigation Drawer -->
+  <aside class="mobile-nav-drawer" id="mobileNavDrawer">
+    <div class="mobile-nav-header">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor"/>
+          <path d="M8 21h8M12 17v4" stroke="currentColor"/>
+          <path d="M7 8l3 3-3 3M13 14h4" stroke="currentColor"/>
+        </svg>
+        <span class="brand-name">SlideCraft<span class="brand-accent">Studio</span></span>
+      </div>
+      <button class="btn-close-drawer" id="btnCloseMobileNav" title="Close Menu">✕</button>
+    </div>
+
+    <div class="mobile-nav-content">
+      <div class="mobile-nav-section">
+        <span class="mobile-nav-heading">Project Actions</span>
+        <button class="mobile-menu-item" id="mBtnNew"><span class="m-icon">📄</span> New Presentation</button>
+        <button class="mobile-menu-item" id="mBtnOpenManager"><span class="m-icon">📂</span> Open / Projects Manager</button>
+        <button class="mobile-menu-item" id="mBtnSave"><span class="m-icon">💾</span> Save to Browser</button>
+        <button class="mobile-menu-item" id="mBtnImport"><span class="m-icon">📥</span> Import Project (.json)</button>
+        <button class="mobile-menu-item" id="mBtnExport"><span class="m-icon">📤</span> Export Project JSON</button>
+        <button class="mobile-menu-item" id="mBtnExportBundle"><span class="m-icon">📦</span> Export Bundle (with Media)</button>
+        <button class="mobile-menu-item" id="mBtnPrint"><span class="m-icon">🖨️</span> Print / Save to PDF</button>
+        <button class="mobile-menu-item" id="mBtnMediaFolder"><span class="m-icon">📁</span> Media Folder & Library</button>
+      </div>
+
+      <div class="mobile-nav-section">
+        <span class="mobile-nav-heading">Presentation Theme</span>
+        <select id="mobileThemeSelect" class="app-select" style="width: 100%; padding: 8px;">
+          <option value="modern-dark">Modern Dark</option>
+          <option value="minimal-light">Minimal Light</option>
+          <option value="corporate-blue">Corporate Blue</option>
+          <option value="elegant-gradient">Elegant Gradient</option>
+          <option value="creative-studio">Creative Studio</option>
+          <option value="classic-presentation">Classic Slate</option>
+        </select>
+      </div>
+
+      <div class="mobile-nav-section">
+        <span class="mobile-nav-heading">Edit Actions</span>
+        <div class="btn-grid-2">
+          <button class="prop-btn-secondary" id="mBtnUndo">↩️ Undo</button>
+          <button class="prop-btn-secondary" id="mBtnRedo">↪️ Redo</button>
+        </div>
+        <div class="btn-grid-2" style="margin-top: 8px;">
+          <button class="prop-btn-secondary" id="mBtnDuplicate">📑 Duplicate</button>
+          <button class="prop-btn-danger" id="mBtnDelete">🗑️ Delete</button>
+        </div>
+      </div>
+
+      <div class="mobile-nav-section">
+        <button class="mobile-menu-item" id="mBtnShortcuts"><span class="m-icon">⌨️</span> Keyboard Shortcuts</button>
+      </div>
+    </div>
+  </aside>
 
   <!-- FULLSCREEN PRESENTATION MODE OVERLAY -->
   <div class="presentation-overlay" id="presentationOverlay" tabindex="-1">
