@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SlideCraft Studio - Professional Presentation Editor</title>
+  <meta name="description" content="A professional PowerPoint-style presentation editor built with HTML5, CSS3, and Vanilla JavaScript with local persistence, transitions, animations, media, and fullscreen presentation.">
+  <meta property="og:title" content="SlideCraft Studio - Professional Presentation Editor">
+  <meta property="og:description" content="Create, edit, animate, and present professional slide decks directly in your browser.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><rect width='24' height='24' rx='5' fill='%231e1b4b'/><path d='M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zm4 14h8v2H8v-2z' fill='%23818cf8'/></svg>">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="app-body">
+  <!-- Top Application Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor"/>
+          <path d="M8 21h8M12 17v4" stroke="currentColor"/>
+          <path d="M7 8l3 3-3 3M13 14h4" stroke="currentColor"/>
+        </svg>
+        <span class="brand-name">SlideCraft<span class="brand-accent">Studio</span></span>
+      </div>
+
+      <div class="project-title-container">
+        <input type="text" id="projectTitleInput" class="project-title-input" value="Welcome to SlideCraft Studio" title="Click to rename presentation" spellcheck="false">
+      </div>
+
+      <div class="save-indicator" id="saveIndicator" title="Storage status">
+        <span class="status-dot saved"></span>
+        <span class="status-text" id="saveStatusText">Saved</span>
+      </div>
+    </div>
+
+    <!-- Menubar dropdowns -->
+    <nav class="app-menubar">
+      <div class="menu-dropdown">
+        <button class="menu-btn" id="menuFileBtn">File ▾</button>
+        <div class="dropdown-panel" id="fileMenuPanel">
+          <button class="dropdown-item" id="btnNewProject"><span class="item-icon">📄</span> New Presentation <kbd>Ctrl+N</kbd></button>
+          <button class="dropdown-item" id="btnOpenProjectManager"><span class="item-icon">📂</span> Open / Projects Manager...</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="btnSave"><span class="item-icon">💾</span> Save to Browser <kbd>Ctrl+S</kbd></button>
+          <button class="dropdown-item" id="btnSaveAsCopy"><span class="item-icon">📑</span> Save As Copy...</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="btnImportJson"><span class="item-icon">📥</span> Import Project (.json)...</button>
+          <button class="dropdown-item" id="btnExportJson"><span class="item-icon">📤</span> Export Project JSON</button>
+          <button class="dropdown-item" id="btnExportBundle"><span class="item-icon">📦</span> Export Bundle (with Media)</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="btnPrintPdf"><span class="item-icon">🖨️</span> Print / Save to PDF <kbd>Ctrl+P</kbd></button>
+          <button class="dropdown-item" id="btnConnectMediaFolder"><span class="item-icon">📁</span> Connect Media Folder...</button>
+        </div>
+      </div>
+
+      <div class="menu-dropdown">
+        <button class="menu-btn" id="menuEditBtn">Edit ▾</button>
+        <div class="dropdown-panel" id="editMenuPanel">
+          <button class="dropdown-item" id="btnUndo"><span class="item-icon">↩️</span> Undo <kbd>Ctrl+Z</kbd></button>
+          <button class="dropdown-item" id="btnRedo"><span class="item-icon">↪️</span> Redo <kbd>Ctrl+Y</kbd></button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="btnCut"><span class="item-icon">✂️</span> Cut <kbd>Ctrl+X</kbd></button>
+          <button class="dropdown-item" id="btnCopy"><span class="item-icon">📋</span> Copy <kbd>Ctrl+C</kbd></button>
+          <button class="dropdown-item" id="btnPaste"><span class="item-icon">📌</span> Paste <kbd>Ctrl+V</kbd></button>
+          <button class="dropdown-item" id="btnDuplicate"><span class="item-icon">📑</span> Duplicate <kbd>Ctrl+D</kbd></button>
+          <button class="dropdown-item" id="btnDeleteSelected"><span class="item-icon">🗑️</span> Delete <kbd>Del</kbd></button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="btnSelectAll"><span class="item-icon">🔲</span> Select All Elements <kbd>Ctrl+A</kbd></button>
+        </div>
+      </div>
+
+      <div class="menu-dropdown">
+        <button class="menu-btn" id="menuInsertBtn">Insert ▾</button>
+        <div class="dropdown-panel" id="insertMenuPanel">
+          <button class="dropdown-item" id="menuInsertText"><span class="item-icon">T</span> Text Box</button>
+          <button class="dropdown-item" id="menuInsertRect"><span class="item-icon">▭</span> Rectangle</button>
+          <button class="dropdown-item" id="menuInsertCircle"><span class="item-icon">◯</span> Circle / Ellipse</button>
+          <button class="dropdown-item" id="menuInsertArrow"><span class="item-icon">➔</span> Arrow</button>
+          <button class="dropdown-item" id="menuInsertLine"><span class="item-icon">―</span> Line</button>
+          <button class="dropdown-item" id="menuInsertTriangle"><span class="item-icon">▲</span> Triangle</button>
+          <button class="dropdown-item" id="menuInsertCallout"><span class="item-icon">💬</span> Callout Speech Box</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="menuInsertImage"><span class="item-icon">🖼️</span> Image File...</button>
+          <button class="dropdown-item" id="menuInsertVideo"><span class="item-icon">🎬</span> Video File...</button>
+          <button class="dropdown-item" id="menuInsertAudio"><span class="item-icon">🎵</span> Audio Track...</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="menuInsertMediaLibrary"><span class="item-icon">📚</span> Media Library...</button>
+        </div>
+      </div>
+
+      <div class="menu-dropdown">
+        <button class="menu-btn" id="menuSlideBtn">Slide ▾</button>
+        <div class="dropdown-panel" id="slideMenuPanel">
+          <button class="dropdown-item" id="menuNewSlide"><span class="item-icon">➕</span> New Slide</button>
+          <button class="dropdown-item" id="menuDuplicateSlide"><span class="item-icon">📑</span> Duplicate Current Slide</button>
+          <button class="dropdown-item" id="menuDeleteSlide"><span class="item-icon">🗑️</span> Delete Current Slide</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="menuMoveSlideUp"><span class="item-icon">▲</span> Move Slide Up</button>
+          <button class="dropdown-item" id="menuMoveSlideDown"><span class="item-icon">▼</span> Move Slide Down</button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="menuSlideLayouts"><span class="item-icon">📐</span> Change Layout Preset...</button>
+        </div>
+      </div>
+
+      <div class="menu-dropdown">
+        <button class="menu-btn" id="menuViewBtn">View ▾</button>
+        <div class="dropdown-panel" id="viewMenuPanel">
+          <button class="dropdown-item" id="menuPresentAll"><span class="item-icon">▶️</span> Present From Start <kbd>F5</kbd></button>
+          <button class="dropdown-item" id="menuPresentCurrent"><span class="item-icon">⏯️</span> Present From Current <kbd>Shift+F5</kbd></button>
+          <hr class="dropdown-divider">
+          <button class="dropdown-item" id="menuToggleGrid"><span class="item-icon">▦</span> Toggle Grid & Snapping</button>
+          <button class="dropdown-item" id="menuToggleNotes"><span class="item-icon">📝</span> Toggle Speaker Notes Drawer</button>
+          <button class="dropdown-item" id="menuZoomFit"><span class="item-icon">🔍</span> Fit to Viewport</button>
+        </div>
+      </div>
+
+      <div class="menu-dropdown">
+        <button class="menu-btn" id="menuHelpBtn">Help ▾</button>
+        <div class="dropdown-panel" id="helpMenuPanel">
+          <button class="dropdown-item" id="btnShortcutsHelp"><span class="item-icon">⌨️</span> Keyboard Shortcuts Reference</button>
+          <button class="dropdown-item" id="btnAboutApp"><span class="item-icon">ℹ️</span> About SlideCraft Studio</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="header-right">
+      <!-- Presentation Theme Switcher -->
+      <div class="deck-theme-selector" title="Presentation Deck Theme">
+        <span class="selector-label">Theme:</span>
+        <select id="themeSelect" class="app-select">
+          <option value="modern-dark">Modern Dark</option>
+          <option value="minimal-light">Minimal Light</option>
+          <option value="corporate-blue">Corporate Blue</option>
+          <option value="elegant-gradient">Elegant Gradient</option>
+          <option value="creative-studio">Creative Studio</option>
+          <option value="classic-presentation">Classic Slate</option>
+        </select>
+      </div>
+
+      <!-- Present button -->
+      <button class="btn-present" id="btnPresent" title="Start Fullscreen Presentation (F5)">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span>Present</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Quick Action Ribbon / Toolbar -->
+  <section class="app-ribbon">
+    <!-- Group: History & Slides -->
+    <div class="ribbon-group">
+      <button class="ribbon-btn" id="ribbonUndo" title="Undo (Ctrl+Z)" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+      </button>
+      <button class="ribbon-btn" id="ribbonRedo" title="Redo (Ctrl+Y)" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
+      </button>
+      <div class="ribbon-separator"></div>
+      <button class="ribbon-btn-dropdown" id="ribbonNewSlideBtn" title="Add Slide with Layout Preset">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M12 7v6M9 10h6"/></svg>
+        <span>New Slide ▾</span>
+      </button>
+    </div>
+
+    <!-- Group: Elements Insertion -->
+    <div class="ribbon-group">
+      <button class="ribbon-btn" id="ribbonAddText" title="Insert Text Box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+        <span>Text</span>
+      </button>
+
+      <div class="ribbon-dropdown-wrapper">
+        <button class="ribbon-btn" id="ribbonShapesBtn" title="Insert Shapes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><circle cx="17" cy="7" r="4"/><polygon points="7 14 3 21 11 21"/></svg>
+          <span>Shapes ▾</span>
+        </button>
+        <div class="ribbon-shapes-palette" id="shapesPalette">
+          <button class="shape-pick-btn" data-shape="rect" title="Rectangle"><span class="shape-icon">▭</span></button>
+          <button class="shape-pick-btn" data-shape="rounded-rect" title="Rounded Rectangle"><span class="shape-icon">▢</span></button>
+          <button class="shape-pick-btn" data-shape="circle" title="Circle / Ellipse"><span class="shape-icon">◯</span></button>
+          <button class="shape-pick-btn" data-shape="triangle" title="Triangle"><span class="shape-icon">▲</span></button>
+          <button class="shape-pick-btn" data-shape="arrow" title="Right Arrow"><span class="shape-icon">➔</span></button>
+          <button class="shape-pick-btn" data-shape="line" title="Straight Line"><span class="shape-icon">―</span></button>
+          <button class="shape-pick-btn" data-shape="callout" title="Speech Callout"><span class="shape-icon">💬</span></button>
+        </div>
+      </div>
+
+      <button class="ribbon-btn" id="ribbonAddImage" title="Insert Image from Computer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span>Image</span>
+      </button>
+
+      <button class="ribbon-btn" id="ribbonAddVideo" title="Insert Video (MP4 / WebM)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        <span>Video</span>
+      </button>
+
+      <button class="ribbon-btn" id="ribbonAddAudio" title="Insert Audio Track (MP3 / WAV)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <span>Audio</span>
+      </button>
+
+      <button class="ribbon-btn" id="ribbonMediaLibrary" title="Open Media Library & Folder Picker">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>Media Folder</span>
+      </button>
+    </div>
+
+    <!-- Group: Stacking and Alignment -->
+    <div class="ribbon-group">
+      <button class="ribbon-btn" id="ribbonBringForward" title="Bring Forward">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <button class="ribbon-btn" id="ribbonSendBackward" title="Send Backward">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ribbon-separator"></div>
+      <button class="ribbon-btn" id="ribbonAlignLeft" title="Align Left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="3"/><rect x="8" y="6" width="12" height="4"/><rect x="8" y="14" width="8" height="4"/></svg>
+      </button>
+      <button class="ribbon-btn" id="ribbonAlignCenter" title="Align Horizontal Center">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="21" x2="12" y2="3"/><rect x="6" y="6" width="12" height="4"/><rect x="8" y="14" width="8" height="4"/></svg>
+      </button>
+      <button class="ribbon-btn" id="ribbonAlignRight" title="Align Right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="20" y1="21" x2="20" y2="3"/><rect x="4" y="6" width="12" height="4"/><rect x="8" y="14" width="8" height="4"/></svg>
+      </button>
+      <button class="ribbon-btn" id="ribbonAlignMiddle" title="Align Vertical Middle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><rect x="6" y="6" width="4" height="12"/><rect x="14" y="8" width="4" height="8"/></svg>
+      </button>
+    </div>
+
+    <!-- Group: View and Tools -->
+    <div class="ribbon-group ribbon-group-right">
+      <button class="ribbon-btn toggle-active" id="ribbonToggleGrid" title="Toggle Grid Snapping">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+        <span>Grid</span>
+      </button>
+      <button class="ribbon-btn" id="ribbonToggleNotes" title="Toggle Speaker Notes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Notes</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Main Application Workspace -->
+  <main class="app-workspace">
+    <!-- Left Sidebar: Slide Thumbnails -->
+    <aside class="sidebar-slides" id="sidebarSlides">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Slides (<span id="slideCountLabel">1</span>)</span>
+        <button class="btn-icon-small" id="btnAddSlideSidebar" title="Add Slide (Layout Preset)">➕</button>
+      </div>
+
+      <div class="slides-thumbnail-list" id="slidesList">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </aside>
+
+    <!-- Center Canvas Area -->
+    <section class="canvas-workspace-area" id="canvasWorkspaceArea">
+      <div class="canvas-scroll-container" id="canvasScrollContainer">
+        <!-- The Logical 1920x1080 Slide Canvas Container -->
+        <div class="canvas-scale-wrapper" id="canvasScaleWrapper">
+          <div class="slide-canvas" id="slideCanvas">
+            <!-- Background Layer -->
+            <div class="canvas-background-layer" id="canvasBackgroundLayer"></div>
+
+            <!-- Elements Container Layer -->
+            <div class="canvas-elements-layer" id="canvasElementsLayer"></div>
+
+            <!-- Guides and Snapping Lines Layer -->
+            <div class="canvas-guides-layer" id="canvasGuidesLayer">
+              <div class="guide-line guide-x" id="guideLineX"></div>
+              <div class="guide-line guide-y" id="guideLineY"></div>
+            </div>
+
+            <!-- Selection and Transform Gizmo -->
+            <div class="selection-overlay" id="selectionOverlay">
+              <div class="selection-box" id="selectionBox">
+                <!-- Rotation Handle -->
+                <div class="rotate-stem"></div>
+                <div class="handle rotate-handle" id="handleRotate" title="Drag to Rotate (Hold Shift for 15° steps)"></div>
+
+                <!-- 8 Resize Handles -->
+                <div class="handle resize-nw" data-handle="nw"></div>
+                <div class="handle resize-n"  data-handle="n"></div>
+                <div class="handle resize-ne" data-handle="ne"></div>
+                <div class="handle resize-e"  data-handle="e"></div>
+                <div class="handle resize-se" data-handle="se"></div>
+                <div class="handle resize-s"  data-handle="s"></div>
+                <div class="handle resize-sw" data-handle="sw"></div>
+                <div class="handle resize-w"  data-handle="w"></div>
+
+                <!-- Dimension Tooltip -->
+                <div class="selection-badge" id="selectionBadge">0 × 0</div>
+              </div>
+            </div>
+
+            <!-- Multi-Select Lasso Marquee -->
+            <div class="marquee-rect" id="marqueeRect"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Speaker Notes Collapsible Drawer -->
+      <div class="speaker-notes-drawer collapsed" id="speakerNotesDrawer">
+        <div class="drawer-header" id="notesDrawerHeader">
+          <div class="drawer-header-left">
+            <span class="drawer-icon">📝</span>
+            <span class="drawer-title">Speaker Notes for Slide <span id="notesSlideNumber">1</span></span>
+          </div>
+          <div class="drawer-header-right">
+            <span class="notes-char-count" id="notesCharCount">0 characters</span>
+            <button class="drawer-toggle-btn" id="btnToggleNotesDrawer">▲ Expand</button>
+          </div>
+        </div>
+        <div class="drawer-body">
+          <textarea id="slideNotesInput" class="notes-textarea" placeholder="Type private speaker notes here... Notes are saved with the project and visible in the presenter HUD, but never appear on the actual slide." spellcheck="true"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Contextual Inspector Panels -->
+    <aside class="sidebar-inspector" id="sidebarInspector">
+      <!-- Tabs Header -->
+      <div class="inspector-tabs">
+        <button class="inspector-tab active" data-tab="properties" id="tabPropertiesBtn">Properties</button>
+        <button class="inspector-tab" data-tab="layers" id="tabLayersBtn">Layers</button>
+        <button class="inspector-tab" data-tab="transitions" id="tabTransitionsBtn">Transitions</button>
+        <button class="inspector-tab" data-tab="animations" id="tabAnimationsBtn">Animations</button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="inspector-content">
+        <!-- 1. Properties Panel (Contextual: Slide vs Element) -->
+        <div class="inspector-pane active" id="paneProperties">
+          <!-- Slide Properties (Shown when no element is selected) -->
+          <div class="property-group" id="groupSlideProperties">
+            <div class="group-title">Slide Background</div>
+            <div class="prop-row">
+              <label>Fill Type</label>
+              <select id="slideBgTypeSelect" class="prop-select">
+                <option value="solid">Solid Color</option>
+                <option value="gradient-linear">Linear Gradient</option>
+                <option value="gradient-radial">Radial Gradient</option>
+                <option value="image">Image Background</option>
+              </select>
+            </div>
+
+            <div class="prop-row" id="rowSlideBgColor1">
+              <label>Color</label>
+              <div class="color-picker-input">
+                <input type="color" id="slideBgColor1" value="#0f172a">
+                <input type="text" id="slideBgColor1Text" class="prop-input-sm" value="#0f172a">
+              </div>
+            </div>
+
+            <div class="prop-row" id="rowSlideBgColor2" style="display: none;">
+              <label>Second Color</label>
+              <div class="color-picker-input">
+                <input type="color" id="slideBgColor2" value="#1e293b">
+                <input type="text" id="slideBgColor2Text" class="prop-input-sm" value="#1e293b">
+              </div>
+            </div>
+
+            <div class="prop-row" id="rowSlideBgAngle" style="display: none;">
+              <label>Angle</label>
+              <div class="range-with-value">
+                <input type="range" id="slideBgAngle" min="0" max="360" value="135">
+                <span id="slideBgAngleVal">135°</span>
+              </div>
+            </div>
+
+            <div class="prop-row" id="rowSlideBgImage" style="display: none;">
+              <label>Image</label>
+              <button class="prop-btn" id="btnPickSlideBgImage">Select Image File</button>
+            </div>
+
+            <!-- Slide Background Quick Swatches -->
+            <div class="color-swatches-grid">
+              <button class="color-swatch" style="background:#0f172a;" data-bg="solid" data-c1="#0f172a" title="Dark Slate"></button>
+              <button class="color-swatch" style="background:#18181b;" data-bg="solid" data-c1="#18181b" title="Midnight Zinc"></button>
+              <button class="color-swatch" style="background:#ffffff;" data-bg="solid" data-c1="#ffffff" title="Clean White"></button>
+              <button class="color-swatch" style="background:linear-gradient(135deg, #0f172a, #1e1b4b);" data-bg="gradient-linear" data-c1="#0f172a" data-c2="#1e1b4b" data-angle="135" title="Indigo Night"></button>
+              <button class="color-swatch" style="background:linear-gradient(135deg, #111827, #064e3b);" data-bg="gradient-linear" data-c1="#111827" data-c2="#064e3b" data-angle="135" title="Emerald Glow"></button>
+              <button class="color-swatch" style="background:linear-gradient(135deg, #31103f, #0f172a);" data-bg="gradient-linear" data-c1="#31103f" data-c2="#0f172a" data-angle="135" title="Cosmic Purple"></button>
+            </div>
+
+            <hr class="pane-divider">
+
+            <div class="group-title">Slide Presets & Layout</div>
+            <button class="prop-btn-secondary" id="btnChangeLayout">📐 Apply Layout Preset</button>
+            <button class="prop-btn-secondary" id="btnDuplicateCurrentSlide">📑 Duplicate Slide</button>
+            <button class="prop-btn-danger" id="btnDeleteCurrentSlide">🗑️ Delete Slide</button>
+          </div>
+
+          <!-- Element Properties (Shown when one or more elements are selected) -->
+          <div class="property-group" id="groupElementProperties" style="display: none;">
+            <div class="group-title" id="elementTypeNameLabel">Element Properties</div>
+
+            <!-- Transform: Position & Size -->
+            <div class="prop-section-subtitle">Transform & Size</div>
+            <div class="prop-grid-2">
+              <div class="prop-field">
+                <label>X (px)</label>
+                <input type="number" id="propX" class="prop-input">
+              </div>
+              <div class="prop-field">
+                <label>Y (px)</label>
+                <input type="number" id="propY" class="prop-input">
+              </div>
+              <div class="prop-field">
+                <label>Width</label>
+                <input type="number" id="propWidth" class="prop-input" min="10">
+              </div>
+              <div class="prop-field">
+                <label>Height</label>
+                <input type="number" id="propHeight" class="prop-input" min="10">
+              </div>
+              <div class="prop-field">
+                <label>Rotate (°)</label>
+                <input type="number" id="propRotation" class="prop-input" min="-360" max="360">
+              </div>
+              <div class="prop-field">
+                <label>Opacity (%)</label>
+                <input type="number" id="propOpacity" class="prop-input" min="0" max="100" value="100">
+              </div>
+            </div>
+
+            <!-- Text Formatting (Only for Text Elements) -->
+            <div id="subgroupTextProps" style="display: none;">
+              <hr class="pane-divider">
+              <div class="prop-section-subtitle">Text Formatting</div>
+
+              <div class="prop-row">
+                <label>Font</label>
+                <select id="propFontFamily" class="prop-select">
+                  <option value="Inter, sans-serif">Inter</option>
+                  <option value="Roboto, sans-serif">Roboto</option>
+                  <option value="'Playfair Display', serif">Playfair Display</option>
+                  <option value="'Outfit', sans-serif">Outfit</option>
+                  <option value="'Fira Code', monospace">Fira Code</option>
+                  <option value="Georgia, serif">Georgia</option>
+                  <option value="Arial, sans-serif">Arial</option>
+                  <option value="'Courier New', monospace">Courier</option>
+                </select>
+              </div>
+
+              <div class="prop-row">
+                <label>Size (px)</label>
+                <input type="number" id="propFontSize" class="prop-input" min="8" max="250" value="32">
+              </div>
+
+              <!-- Text Style Toggles -->
+              <div class="btn-toggle-group">
+                <button class="toggle-btn" id="btnBold" title="Bold (Ctrl+B)"><b>B</b></button>
+                <button class="toggle-btn" id="btnItalic" title="Italic (Ctrl+I)"><i>I</i></button>
+                <button class="toggle-btn" id="btnUnderline" title="Underline (Ctrl+U)"><u>U</u></button>
+                <button class="toggle-btn" id="btnAlignLeft" title="Align Left">⇤</button>
+                <button class="toggle-btn" id="btnAlignCenter" title="Align Center">⇎</button>
+                <button class="toggle-btn" id="btnAlignRight" title="Align Right">⇥</button>
+              </div>
+
+              <div class="prop-row">
+                <label>Text Color</label>
+                <div class="color-picker-input">
+                  <input type="color" id="propTextColor" value="#ffffff">
+                  <input type="text" id="propTextColorText" class="prop-input-sm" value="#ffffff">
+                </div>
+              </div>
+
+              <div class="prop-row">
+                <label>Text Highlight</label>
+                <div class="color-picker-input">
+                  <input type="color" id="propTextBgColor" value="#000000">
+                  <input type="text" id="propTextBgColorText" class="prop-input-sm" value="transparent">
+                </div>
+              </div>
+
+              <div class="prop-row">
+                <label>Line Height</label>
+                <input type="number" id="propLineHeight" class="prop-input" min="0.8" max="3" step="0.1" value="1.3">
+              </div>
+            </div>
+
+            <!-- Shape Formatting (For shapes and containers) -->
+            <div id="subgroupShapeProps" style="display: none;">
+              <hr class="pane-divider">
+              <div class="prop-section-subtitle">Shape Appearance</div>
+
+              <div class="prop-row">
+                <label>Fill Color</label>
+                <div class="color-picker-input">
+                  <input type="color" id="propShapeFill" value="#4f46e5">
+                  <input type="text" id="propShapeFillText" class="prop-input-sm" value="#4f46e5">
+                </div>
+              </div>
+
+              <div class="prop-row">
+                <label>Stroke Color</label>
+                <div class="color-picker-input">
+                  <input type="color" id="propShapeStroke" value="#818cf8">
+                  <input type="text" id="propShapeStrokeText" class="prop-input-sm" value="#818cf8">
+                </div>
+              </div>
+
+              <div class="prop-grid-2">
+                <div class="prop-field">
+                  <label>Stroke (px)</label>
+                  <input type="number" id="propStrokeWidth" class="prop-input" min="0" max="40" value="2">
+                </div>
+                <div class="prop-field">
+                  <label>Corner Radius</label>
+                  <input type="number" id="propCornerRadius" class="prop-input" min="0" max="100" value="8">
+                </div>
+              </div>
+            </div>
+
+            <!-- Media Options (Image / Video / Audio) -->
+            <div id="subgroupMediaProps" style="display: none;">
+              <hr class="pane-divider">
+              <div class="prop-section-subtitle">Media Settings</div>
+
+              <div class="prop-row" id="rowMediaFit">
+                <label>Fit Mode</label>
+                <select id="propMediaFit" class="prop-select">
+                  <option value="contain">Contain</option>
+                  <option value="cover">Cover (Fill & Crop)</option>
+                  <option value="fill">Stretch</option>
+                </select>
+              </div>
+
+              <div id="subgroupVideoProps" style="display: none;">
+                <div class="prop-checkbox-row">
+                  <label><input type="checkbox" id="propVideoAutoplay"> Autoplay in Presentation</label>
+                </div>
+                <div class="prop-checkbox-row">
+                  <label><input type="checkbox" id="propVideoLoop" checked> Loop Video</label>
+                </div>
+                <div class="prop-checkbox-row">
+                  <label><input type="checkbox" id="propVideoMuted"> Mute Audio</label>
+                </div>
+              </div>
+
+              <div id="subgroupAudioProps" style="display: none;">
+                <div class="prop-checkbox-row">
+                  <label><input type="checkbox" id="propAudioLoop"> Loop Audio</label>
+                </div>
+                <div class="prop-checkbox-row">
+                  <label><input type="checkbox" id="propAudioBgTrack"> Slide Background Track</label>
+                </div>
+                <div class="prop-row">
+                  <label>Volume</label>
+                  <input type="range" id="propAudioVolume" min="0" max="1" step="0.05" value="1">
+                </div>
+              </div>
+
+              <button class="prop-btn" id="btnReplaceMedia">Replace File...</button>
+            </div>
+
+            <!-- Arrange & Actions -->
+            <hr class="pane-divider">
+            <div class="prop-section-subtitle">Arrangement & Layer</div>
+            <div class="btn-grid-2">
+              <button class="prop-btn-secondary" id="btnBringForwardProp">Bring Forward</button>
+              <button class="prop-btn-secondary" id="btnSendBackwardProp">Send Backward</button>
+              <button class="prop-btn-secondary" id="btnBringToFrontProp">Bring To Front</button>
+              <button class="prop-btn-secondary" id="btnSendToBackProp">Send To Back</button>
+            </div>
+
+            <div class="btn-grid-2" style="margin-top: 8px;">
+              <button class="prop-btn-secondary" id="btnLockElement">🔒 Lock</button>
+              <button class="prop-btn-secondary" id="btnDuplicateProp">📑 Duplicate</button>
+            </div>
+            <button class="prop-btn-danger" id="btnDeleteElementProp" style="margin-top: 8px;">🗑️ Delete Element</button>
+          </div>
+        </div>
+
+        <!-- 2. Layers Panel -->
+        <div class="inspector-pane" id="paneLayers">
+          <div class="group-title">Element Layers (Top to Bottom)</div>
+          <p class="pane-help-text">Drag or click to reorder stacking sequence.</p>
+          <div class="layers-tree-list" id="layersList">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- 3. Transitions Panel -->
+        <div class="inspector-pane" id="paneTransitions">
+          <div class="group-title">Slide Transition</div>
+          <p class="pane-help-text">Visual transition when navigating between slides.</p>
+
+          <div class="prop-row">
+            <label>Transition Effect</label>
+            <select id="transitionEffectSelect" class="prop-select">
+              <option value="none">None (Instant)</option>
+              <option value="fade">Fade</option>
+              <option value="slide-left">Slide Left</option>
+              <option value="slide-right">Slide Right</option>
+              <option value="slide-up">Slide Up</option>
+              <option value="slide-down">Slide Down</option>
+              <option value="zoom">Zoom</option>
+            </select>
+          </div>
+
+          <div class="prop-row">
+            <label>Duration</label>
+            <div class="range-with-value">
+              <input type="range" id="transitionDuration" min="0.2" max="2.0" step="0.1" value="0.5">
+              <span id="transitionDurationVal">0.5s</span>
+            </div>
+          </div>
+
+          <div class="btn-grid-2" style="margin-top: 12px;">
+            <button class="prop-btn" id="btnPreviewTransition">▶ Preview Transition</button>
+            <button class="prop-btn-secondary" id="btnApplyTransitionAll">Apply to All Slides</button>
+          </div>
+        </div>
+
+        <!-- 4. Animations Panel -->
+        <div class="inspector-pane" id="paneAnimations">
+          <div class="group-title">Element Animation</div>
+          <div id="animationTargetNotice" class="pane-help-text">Select an element to configure its entrance animation.</div>
+
+          <div id="animationControls" style="display: none;">
+            <div class="prop-row">
+              <label>Entrance Effect</label>
+              <select id="animEffectSelect" class="prop-select">
+                <option value="none">None</option>
+                <option value="fade-in">Fade In</option>
+                <option value="rise">Rise Up</option>
+                <option value="slide-in-left">Slide In Left</option>
+                <option value="slide-in-right">Slide In Right</option>
+                <option value="zoom-in">Zoom In</option>
+                <option value="rotate-in">Rotate In</option>
+              </select>
+            </div>
+
+            <div class="prop-row">
+              <label>Trigger</label>
+              <select id="animTriggerSelect" class="prop-select">
+                <option value="on-click">On Click (Sequenced in Slideshow)</option>
+                <option value="with-previous">With Slide Entrance</option>
+                <option value="after-previous">After Previous (0.3s delay)</option>
+              </select>
+            </div>
+
+            <div class="prop-row">
+              <label>Duration</label>
+              <div class="range-with-value">
+                <input type="range" id="animDuration" min="0.2" max="2.5" step="0.1" value="0.6">
+                <span id="animDurationVal">0.6s</span>
+              </div>
+            </div>
+
+            <div class="prop-row">
+              <label>Delay</label>
+              <div class="range-with-value">
+                <input type="range" id="animDelay" min="0" max="2.0" step="0.1" value="0">
+                <span id="animDelayVal">0.0s</span>
+              </div>
+            </div>
+
+            <div class="btn-grid-2" style="margin-top: 12px;">
+              <button class="prop-btn" id="btnPreviewAnim">▶ Preview Animation</button>
+              <button class="prop-btn-danger" id="btnRemoveAnim">Remove Animation</button>
+            </div>
+          </div>
+
+          <hr class="pane-divider">
+          <div class="group-title">Animated Elements on this Slide</div>
+          <div class="animated-elements-list" id="animatedElementsList">
+            <!-- Dynamic list of animation sequence -->
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Bottom Application Status Bar -->
+  <footer class="app-statusbar">
+    <div class="statusbar-left">
+      <span class="status-item" id="statusSlideIndex">Slide 1 of 1</span>
+      <span class="status-separator">|</span>
+      <span class="status-item" id="statusSelection">No selection</span>
+    </div>
+
+    <div class="statusbar-right">
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="btnZoomOut" title="Zoom Out (Ctrl -)">−</button>
+        <input type="range" id="zoomSlider" min="25" max="200" value="100" class="zoom-slider">
+        <span class="zoom-text" id="zoomText">100%</span>
+        <button class="zoom-btn" id="btnZoomIn" title="Zoom In (Ctrl +)">+</button>
+        <button class="zoom-fit-btn" id="btnZoomFit" title="Fit to Viewport">Fit</button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- FULLSCREEN PRESENTATION MODE OVERLAY -->
+  <div class="presentation-overlay" id="presentationOverlay" tabindex="-1">
+    <div class="presentation-viewport" id="presentationViewport">
+      <!-- Fullscreen presentation slide display -->
+      <div class="presentation-slide-container" id="presentationSlideContainer">
+        <!-- Injected dynamically during slideshow -->
+      </div>
+    </div>
+
+    <!-- Laser pointer / highlight indicator -->
+    <div class="presentation-laser" id="presentationLaser"></div>
+
+    <!-- Discreet Presenter Controls Bar (Reveals on mouse hover or touch) -->
+    <div class="presentation-hud" id="presentationHud">
+      <button class="hud-btn" id="btnHudPrev" title="Previous Slide (Left Arrow)">◀</button>
+      <span class="hud-counter" id="hudSlideCounter">1 / 1</span>
+      <button class="hud-btn" id="btnHudNext" title="Next Slide or Next Animation (Right Arrow / Space)">▶</button>
+      <div class="hud-separator"></div>
+      <button class="hud-btn" id="btnHudLaser" title="Toggle Laser Pointer">🔴 Pointer</button>
+      <button class="hud-btn" id="btnHudNotes" title="Toggle Speaker Notes">📝 Notes</button>
+      <button class="hud-btn" id="btnHudBlackout" title="Black Screen (B)">⬛ Blackout</button>
+      <button class="hud-btn hud-exit" id="btnHudExit" title="Exit Presentation (Esc)">✕ Exit</button>
+    </div>
+
+    <!-- Presenter Notes Popover Overlay -->
+    <div class="hud-notes-popup" id="hudNotesPopup" style="display: none;">
+      <div class="hud-notes-header">
+        <span>Speaker Notes</span>
+        <button id="btnCloseHudNotes" class="btn-close-sm">✕</button>
+      </div>
+      <div class="hud-notes-content" id="hudNotesContent">
+        No notes for this slide.
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALS -->
+
+  <!-- Modal 1: Layout Presets Picker -->
+  <div class="modal-backdrop" id="modalLayoutPicker" style="display: none;">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h3 class="modal-title">Select Slide Layout Preset</h3>
+        <button class="modal-close-btn" data-close="modalLayoutPicker">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="layouts-grid">
+          <!-- 1. Title -->
+          <div class="layout-card" data-layout="title">
+            <div class="layout-card-preview layout-preview-title">
+              <div class="mock-title"></div>
+              <div class="mock-subtitle"></div>
+            </div>
+            <div class="layout-card-name">Title Slide</div>
+            <div class="layout-card-desc">Bold headline with presenter subtitle</div>
+          </div>
+
+          <!-- 2. Title & Content -->
+          <div class="layout-card" data-layout="title-content">
+            <div class="layout-card-preview layout-preview-content">
+              <div class="mock-header"></div>
+              <div class="mock-bullet"></div>
+              <div class="mock-bullet"></div>
+              <div class="mock-bullet"></div>
+            </div>
+            <div class="layout-card-name">Title & Content</div>
+            <div class="layout-card-desc">Standard presentation slide with bullet points</div>
+          </div>
+
+          <!-- 3. Two Columns -->
+          <div class="layout-card" data-layout="two-columns">
+            <div class="layout-card-preview layout-preview-columns">
+              <div class="mock-header"></div>
+              <div class="mock-col left"></div>
+              <div class="mock-col right"></div>
+            </div>
+            <div class="layout-card-name">Two Columns</div>
+            <div class="layout-card-desc">Compare two ideas or side-by-side content</div>
+          </div>
+
+          <!-- 4. Image-Focused -->
+          <div class="layout-card" data-layout="image-focused">
+            <div class="layout-card-preview layout-preview-image">
+              <div class="mock-header"></div>
+              <div class="mock-image-frame">🖼️</div>
+            </div>
+            <div class="layout-card-name">Image-Focused</div>
+            <div class="layout-card-desc">Large visual showcase with caption</div>
+          </div>
+
+          <!-- 5. Section Divider -->
+          <div class="layout-card" data-layout="section-divider">
+            <div class="layout-card-preview layout-preview-section">
+              <div class="mock-section-rule"></div>
+              <div class="mock-section-title"></div>
+            </div>
+            <div class="layout-card-name">Section Divider</div>
+            <div class="layout-card-desc">Mark transitions between presentation topics</div>
+          </div>
+
+          <!-- 6. Blank -->
+          <div class="layout-card" data-layout="blank">
+            <div class="layout-card-preview layout-preview-blank">
+              <span class="mock-empty-icon">⬚</span>
+            </div>
+            <div class="layout-card-name">Blank Slide</div>
+            <div class="layout-card-desc">Clean canvas for custom design from scratch</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Media Folder & Library -->
+  <div class="modal-backdrop" id="modalMediaLibrary" style="display: none;">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-header">
+        <h3 class="modal-title">Media Library & Local Folder Access</h3>
+        <button class="modal-close-btn" data-close="modalMediaLibrary">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Native Browser Security Context Banner -->
+        <div class="info-alert">
+          <strong>Browser Local-First Architecture:</strong>
+          In compliance with browser sandboxing, SlideCraft Studio accesses local media using the standard
+          <strong>File System Access API</strong> or native file pickers. Media files are stored inside
+          your browser's IndexedDB database for persistent offline use.
+        </div>
+
+        <!-- Connection actions toolbar -->
+        <div class="media-library-toolbar">
+          <button class="btn-primary" id="btnConnectFsFolder">
+            📁 Connect Local "media/" Folder
+          </button>
+          <label class="btn-secondary file-upload-label">
+            📂 Select Folder (Fallback)
+            <input type="file" id="inputFolderFallback" webkitdirectory directory multiple style="display:none;">
+          </label>
+          <label class="btn-secondary file-upload-label">
+            ➕ Upload Media Files...
+            <input type="file" id="inputMediaFiles" accept="image/*,video/*,audio/*" multiple style="display:none;">
+          </label>
+        </div>
+
+        <!-- Media Items Grid -->
+        <div class="media-grid" id="mediaLibraryGrid">
+          <div class="empty-media-notice">
+            No media imported yet. Connect your local "media/" folder or click "Upload Media Files" to import images, videos, or audio into your deck.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Projects Manager -->
+  <div class="modal-backdrop" id="modalProjectManager" style="display: none;">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h3 class="modal-title">Presentation Projects Manager</h3>
+        <button class="modal-close-btn" data-close="modalProjectManager">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="project-manager-actions">
+          <button class="btn-primary" id="btnCreateNewProjectFromManager">➕ Create New Presentation</button>
+          <button class="btn-secondary" id="btnImportProjectFileFromManager">📥 Import Project (.json)</button>
+        </div>
+        <div class="projects-list-container" id="projectsManagerList">
+          <!-- Populated from IndexedDB -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Keyboard Shortcuts Reference -->
+  <div class="modal-backdrop" id="modalShortcuts" style="display: none;">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h3 class="modal-title">Keyboard Shortcuts</h3>
+        <button class="modal-close-btn" data-close="modalShortcuts">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcuts-grid">
+          <div class="shortcut-group">
+            <h4>Presentation</h4>
+            <div class="shortcut-item"><span>Start Slideshow</span> <kbd>F5</kbd></div>
+            <div class="shortcut-item"><span>From Current Slide</span> <kbd>Shift + F5</kbd></div>
+            <div class="shortcut-item"><span>Next Slide / Step</span> <kbd>→</kbd> or <kbd>Space</kbd></div>
+            <div class="shortcut-item"><span>Previous Slide</span> <kbd>←</kbd> or <kbd>Backspace</kbd></div>
+            <div class="shortcut-item"><span>Exit Presentation</span> <kbd>Esc</kbd></div>
+            <div class="shortcut-item"><span>Black Screen</span> <kbd>B</kbd></div>
+          </div>
+          <div class="shortcut-group">
+            <h4>Editor & Canvas</h4>
+            <div class="shortcut-item"><span>Save to Browser</span> <kbd>Ctrl + S</kbd></div>
+            <div class="shortcut-item"><span>Undo</span> <kbd>Ctrl + Z</kbd></div>
+            <div class="shortcut-item"><span>Redo</span> <kbd>Ctrl + Y</kbd></div>
+            <div class="shortcut-item"><span>Duplicate Element/Slide</span> <kbd>Ctrl + D</kbd></div>
+            <div class="shortcut-item"><span>Delete Selected</span> <kbd>Del</kbd> / <kbd>Backspace</kbd></div>
+            <div class="shortcut-item"><span>Select All Elements</span> <kbd>Ctrl + A</kbd></div>
+            <div class="shortcut-item"><span>Nudge 1px</span> <kbd>Arrow keys</kbd></div>
+            <div class="shortcut-item"><span>Nudge 10px</span> <kbd>Shift + Arrows</kbd></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden File Input Helpers for standard operations -->
+  <input type="file" id="hiddenProjectJsonInput" accept=".json,.slidecraft" style="display:none;">
+  <input type="file" id="hiddenSingleImageInput" accept="image/*" style="display:none;">
+  <input type="file" id="hiddenSingleVideoInput" accept="video/*" style="display:none;">
+  <input type="file" id="hiddenSingleAudioInput" accept="audio/*" style="display:none;">
+
+  <!-- Notification Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Main Vanilla JavaScript App Entry -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

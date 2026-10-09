@@ -1,0 +1,7 @@
+{
+  "name": "SlideCraft Studio",
+  "description": "A professional PowerPoint-style presentation editor built with HTML5, CSS3, and Vanilla JavaScript with local persistence, transitions, animations, media, and fullscreen presentation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
