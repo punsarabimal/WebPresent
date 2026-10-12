@@ -5292,9 +5292,7 @@
         document.getElementById('modalShortcuts').style.display = 'flex';
       };
       document.getElementById('btnAboutApp').onclick = () => {
-        alert(
-          'SlideCraft Studio v1.0\nProfessional PowerPoint-Style Presentation Editor\n100% Client-Side HTML5 / CSS3 / Vanilla JavaScript.'
-        );
+        this.showToast('SlideCraft Studio v1.0 • Professional PowerPoint-Style Presentation Editor', 'info');
       };
 
       // Global Keyboard Shortcuts
