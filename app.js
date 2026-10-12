@@ -927,6 +927,12 @@
       this.directoryHandle = null;
       this.mediaAssetsCache = [];
 
+      // Canvas Rulers & Custom Guidelines
+      this.showRulers = true;
+      this.mouseRulerPos = null;
+      this.customGuides = { x: [], y: [] };
+      this.rulerGuideDrag = null;
+
       // Autosave debouncer
       this.autosaveTimeout = null;
     }
@@ -947,6 +953,7 @@
 
       this.cacheInitialHistory();
       this.bindUI();
+      this.initRulers();
       this.setupCanvasResizeObserver();
       this.renderAll();
       this.fitCanvasToViewport();
@@ -1157,7 +1164,7 @@
             x: 160,
             y: 260,
             width: 1600,
-            height: 600,
+            height: 320,
             rotation: 0,
             opacity: 1,
             zIndex: 2,
@@ -1219,7 +1226,7 @@
             x: 200,
             y: 290,
             width: 680,
-            height: 600,
+            height: 380,
             rotation: 0,
             opacity: 1,
             zIndex: 3,
@@ -1256,7 +1263,7 @@
             x: 1040,
             y: 290,
             width: 680,
-            height: 600,
+            height: 380,
             rotation: 0,
             opacity: 1,
             zIndex: 5,
@@ -1655,22 +1662,52 @@
       const slide = this.getCurrentSlide();
       if (!slide || this.selectedElementIds.length === 0) return;
 
-      this.selectedElementIds.forEach((id) => {
-        const el = slide.elements.find((e) => e.id === id);
-        if (!el) return;
+      const elements = slide.elements.filter((e) => this.selectedElementIds.includes(e.id) && !e.locked);
+      if (elements.length === 0) return;
 
+      if (elements.length === 1) {
+        // Single element aligns to 1920x1080 canvas
+        const el = elements[0];
         if (type === 'left') el.x = 0;
-        else if (type === 'center') el.x = (CANVAS_WIDTH - el.width) / 2;
+        else if (type === 'centerH' || type === 'center') el.x = Math.round((CANVAS_WIDTH - el.width) / 2);
         else if (type === 'right') el.x = CANVAS_WIDTH - el.width;
         else if (type === 'top') el.y = 0;
-        else if (type === 'middle') el.y = (CANVAS_HEIGHT - el.height) / 2;
+        else if (type === 'middleV' || type === 'middle') el.y = Math.round((CANVAS_HEIGHT - el.height) / 2);
         else if (type === 'bottom') el.y = CANVAS_HEIGHT - el.height;
-      });
+        else if (type === 'centerSlide') {
+          el.x = Math.round((CANVAS_WIDTH - el.width) / 2);
+          el.y = Math.round((CANVAS_HEIGHT - el.height) / 2);
+        }
+      } else {
+        // Multi-selection: align relative to selection group bounds
+        const minX = Math.min(...elements.map((e) => e.x));
+        const maxX = Math.max(...elements.map((e) => e.x + e.width));
+        const minY = Math.min(...elements.map((e) => e.y));
+        const maxY = Math.max(...elements.map((e) => e.y + e.height));
+        const groupCenterX = (minX + maxX) / 2;
+        const groupCenterY = (minY + maxY) / 2;
 
-      this.pushHistory('Align elements');
+        if (type === 'left') elements.forEach((e) => (e.x = minX));
+        else if (type === 'centerH' || type === 'center') elements.forEach((e) => (e.x = Math.round(groupCenterX - e.width / 2)));
+        else if (type === 'right') elements.forEach((e) => (e.x = maxX - e.width));
+        else if (type === 'top') elements.forEach((e) => (e.y = minY));
+        else if (type === 'middleV' || type === 'middle') elements.forEach((e) => (e.y = Math.round(groupCenterY - e.height / 2)));
+        else if (type === 'bottom') elements.forEach((e) => (e.y = maxY - e.height));
+        else if (type === 'centerSlide') {
+          const shiftX = Math.round((CANVAS_WIDTH - (maxX - minX)) / 2) - minX;
+          const shiftY = Math.round((CANVAS_HEIGHT - (maxY - minY)) / 2) - minY;
+          elements.forEach((e) => {
+            e.x += shiftX;
+            e.y += shiftY;
+          });
+        }
+      }
+
+      this.pushHistory(`Align elements (${type})`);
       this.renderCanvas();
-      this.renderInspector();
+      this.populateElementInspectorLive();
       this.renderThumbnails();
+      this.showToast(`Aligned (${type})`, 'info');
     }
 
     // -----------------------------------------------------------------------
@@ -1684,6 +1721,7 @@
       this.renderSpeakerNotes();
       this.renderInspector();
       this.updateStatusBar();
+      this.renderRulers();
       if (this.autoFitZoom) {
         this.fitCanvasToViewport();
       }
@@ -1908,6 +1946,12 @@
 
       // 3. Selection Box Gizmo
       this.updateSelectionGizmo();
+
+      // 4. Custom Guidelines
+      this.renderCustomGuides();
+
+      // 5. Canvas Rulers
+      this.renderRulers();
     }
 
     applySlideBackground(targetEl, bg) {
@@ -2006,6 +2050,7 @@
       const slide = this.getCurrentSlide();
       if (!slide || this.selectedElementIds.length === 0) {
         gizmo.classList.remove('active');
+        this.renderRulers();
         return;
       }
 
@@ -2025,6 +2070,17 @@
         gizmo.style.transform = `rotate(${el.rotation || 0}deg)`;
 
         badge.textContent = `${Math.round(el.width)} × ${Math.round(el.height)}`;
+
+        const moveBar = document.getElementById('selectionMoveBar');
+        if (moveBar) {
+          if (el.y < 28) {
+            moveBar.style.top = '4px';
+            moveBar.style.left = '4px';
+          } else {
+            moveBar.style.top = '-26px';
+            moveBar.style.left = '0';
+          }
+        }
       } else {
         // Multi-selection: compute bounding box
         let minX = Infinity,
@@ -2049,8 +2105,21 @@
           gizmo.style.height = `${maxY - minY}px`;
           gizmo.style.transform = 'none';
           badge.textContent = `${this.selectedElementIds.length} items`;
+
+          const moveBar = document.getElementById('selectionMoveBar');
+          if (moveBar) {
+            if (minY < 28) {
+              moveBar.style.top = '4px';
+              moveBar.style.left = '4px';
+            } else {
+              moveBar.style.top = '-26px';
+              moveBar.style.left = '0';
+            }
+          }
         }
       }
+
+      this.renderRulers();
     }
 
     renderSpeakerNotes() {
@@ -2372,24 +2441,56 @@
       const ro = new ResizeObserver(() => {
         if (this.autoFitZoom) {
           this.fitCanvasToViewport();
+        } else {
+          this.renderRulers();
         }
       });
       ro.observe(container);
 
+      const updatePresScaleOnViewportOrOrientation = () => {
+        if (this.isPresentationActive) {
+          this.updatePresentationScale();
+          requestAnimationFrame(() => this.updatePresentationScale());
+          setTimeout(() => this.updatePresentationScale(), 50);
+          setTimeout(() => this.updatePresentationScale(), 150);
+          setTimeout(() => this.updatePresentationScale(), 300);
+        }
+      };
+
       window.addEventListener('resize', () => {
         if (this.autoFitZoom) {
           this.fitCanvasToViewport();
+        } else {
+          this.renderRulers();
         }
-        if (this.isPresentationActive) {
-          this.renderPresentationSlide();
-        }
+        updatePresScaleOnViewportOrOrientation();
       });
 
-      document.addEventListener('fullscreenchange', () => {
+      window.addEventListener('orientationchange', updatePresScaleOnViewportOrOrientation);
+
+      if (window.screen && window.screen.orientation) {
+        window.screen.orientation.addEventListener('change', updatePresScaleOnViewportOrOrientation);
+      }
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updatePresScaleOnViewportOrOrientation);
+      }
+
+      const onFullscreenChange = () => {
         if (this.isPresentationActive) {
-          this.renderPresentationSlide();
+          this.updatePresentationScale();
+          setTimeout(() => this.updatePresentationScale(), 100);
+          setTimeout(() => this.updatePresentationScale(), 300);
+        } else {
+          setTimeout(() => {
+            if (this.autoFitZoom) this.fitCanvasToViewport();
+            else this.renderRulers();
+          }, 100);
         }
-      });
+      };
+
+      document.addEventListener('fullscreenchange', onFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     }
 
     fitCanvasToViewport() {
@@ -2420,6 +2521,7 @@
       container.scrollLeft = 0;
       container.scrollTop = 0;
       this.updateStatusBar();
+      this.renderRulers();
     }
 
     setCustomZoom(level) {
@@ -2435,6 +2537,7 @@
         wrapper.style.height = `${Math.round(CANVAS_HEIGHT * this.zoom)}px`;
       }
       this.updateStatusBar();
+      this.renderRulers();
     }
 
     // -----------------------------------------------------------------------
@@ -2442,9 +2545,12 @@
     // -----------------------------------------------------------------------
     screenToSlide(clientX, clientY) {
       const canvasEl = document.getElementById('slideCanvas');
+      if (!canvasEl) return { x: clientX, y: clientY };
       const rect = canvasEl.getBoundingClientRect();
-      const x = (clientX - rect.left) / this.zoom;
-      const y = (clientY - rect.top) / this.zoom;
+      const scaleX = rect.width / CANVAS_WIDTH;
+      const scaleY = rect.height / CANVAS_HEIGHT;
+      const x = (clientX - rect.left) / (scaleX || this.zoom || 1);
+      const y = (clientY - rect.top) / (scaleY || this.zoom || 1);
       return { x, y };
     }
 
@@ -2455,7 +2561,13 @@
 
       // Pointer Down
       canvasEl.addEventListener('pointerdown', (e) => {
-        // Check handle click
+        // If in text editing mode, let clicks interact with the text
+        if (this.isEditingText) {
+          const textInner = e.target.closest('.element-inner-text.editing');
+          if (textInner) return;
+        }
+
+        // 1. Check handle click (resize or rotate)
         const handle = e.target.closest('.handle');
         if (handle) {
           e.stopPropagation();
@@ -2463,7 +2575,36 @@
           return;
         }
 
-        // Check element click
+        // 2. Check if clicked selection move bar or selection box
+        const selMoveBar = e.target.closest('#selectionMoveBar');
+        const selBox = e.target.closest('#selectionBox');
+        if ((selMoveBar || selBox) && this.selectedElementIds.length > 0) {
+          // If shift or ctrl is pressed, check if user clicked on another element underneath to toggle it
+          if (e.shiftKey || e.ctrlKey) {
+            const elementsAtPt = document.elementsFromPoint(e.clientX, e.clientY);
+            const otherElDom = elementsAtPt.find((n) => n.classList && n.classList.contains('slide-element'));
+            if (otherElDom && otherElDom.dataset.id) {
+              const elId = otherElDom.dataset.id;
+              if (this.selectedElementIds.includes(elId)) {
+                this.selectedElementIds = this.selectedElementIds.filter((id) => id !== elId);
+              } else {
+                this.selectedElementIds.push(elId);
+              }
+              this.updateSelectionGizmo();
+              this.renderInspector();
+              this.updateStatusBar();
+              return;
+            }
+          }
+
+          // Move the currently selected element(s)
+          e.stopPropagation();
+          const pt = this.screenToSlide(e.clientX, e.clientY);
+          this.startElementDrag(pt.x, pt.y);
+          return;
+        }
+
+        // 3. Check element click
         const elDom = e.target.closest('.slide-element');
         if (elDom) {
           const elId = elDom.dataset.id;
@@ -2495,7 +2636,7 @@
           return;
         }
 
-        // Clicked empty canvas space
+        // 4. Clicked empty canvas space
         if (!e.shiftKey && !e.ctrlKey) {
           this.selectedElementIds = [];
           this.updateSelectionGizmo();
@@ -2524,10 +2665,16 @@
       });
 
       window.addEventListener('pointerup', () => {
+        const gizmo = document.getElementById('selectionBox');
+        if (gizmo) gizmo.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+
         if (this.dragState || this.resizeState || this.rotateState) {
           this.hideGuides();
+          this.hideRotationSnapTooltip();
           this.pushHistory('Transform');
           this.renderThumbnails();
+          this.updateSelectionGizmo();
         }
 
         this.dragState = null;
@@ -2544,12 +2691,22 @@
         }
       });
 
-      // Double Click for Direct In-Place Text Editing
+      // Double Click for Direct In-Place Text Editing (works on text element or selection box)
       canvasEl.addEventListener('dblclick', (e) => {
-        const elDom = e.target.closest('.slide-element');
-        if (!elDom) return;
+        let elDom = e.target.closest('.slide-element');
+        let elId = elDom ? elDom.dataset.id : null;
 
-        const elId = elDom.dataset.id;
+        // If user double-clicked inside active selectionBox, find the selected element
+        if (!elDom && this.selectedElementIds.length === 1) {
+          const selBox = e.target.closest('#selectionBox');
+          if (selBox) {
+            elId = this.selectedElementIds[0];
+            elDom = document.getElementById(`canvas_el_${elId}`);
+          }
+        }
+
+        if (!elDom || !elId) return;
+
         const slide = this.getCurrentSlide();
         const el = slide ? slide.elements.find((item) => item.id === elId) : null;
 
@@ -2562,10 +2719,17 @@
       let lastTouchTime = 0;
       canvasEl.addEventListener('touchend', (e) => {
         const now = Date.now();
-        if (now - lastTouchTime < 320 && now - lastTouchTime > 40) {
-          const elDom = e.target.closest('.slide-element');
-          if (elDom) {
-            const elId = elDom.dataset.id;
+        if (now - lastTouchTime < 350 && now - lastTouchTime > 40) {
+          let elDom = e.target.closest('.slide-element');
+          let elId = elDom ? elDom.dataset.id : null;
+          if (!elDom && this.selectedElementIds.length === 1) {
+            const selBox = e.target.closest('#selectionBox');
+            if (selBox) {
+              elId = this.selectedElementIds[0];
+              elDom = document.getElementById(`canvas_el_${elId}`);
+            }
+          }
+          if (elDom && elId) {
             const slide = this.getCurrentSlide();
             const el = slide ? slide.elements.find((item) => item.id === elId) : null;
             if (el && el.type === 'text') {
@@ -2630,9 +2794,18 @@
       this.editingElementId = el.id;
       textInner.contentEditable = 'true';
       textInner.classList.add('editing');
+
+      // Temporarily lower gizmo presence and disable pointer events on gizmo
+      // so clicks and text selection inside text box work completely freely
+      const gizmo = document.getElementById('selectionBox');
+      if (gizmo) {
+        gizmo.style.pointerEvents = 'none';
+        gizmo.style.opacity = '0.2';
+      }
+
       textInner.focus();
 
-      // Select all text
+      // Select all text initially so typing immediately replaces or arrow keys reposition
       const range = document.createRange();
       range.selectNodeContents(textInner);
       const sel = window.getSelection();
@@ -2646,18 +2819,25 @@
         textInner.contentEditable = 'false';
         textInner.classList.remove('editing');
 
+        if (gizmo) {
+          gizmo.style.pointerEvents = '';
+          gizmo.style.opacity = '';
+        }
+
         const newText = textInner.textContent;
         if (el.content !== newText) {
           el.content = newText;
           this.pushHistory('Edit text');
           this.renderThumbnails();
         }
+        this.updateSelectionGizmo();
       };
 
       textInner.onblur = finishEditing;
       textInner.onkeydown = (ev) => {
         if (ev.key === 'Escape') {
-          finishEditing();
+          ev.preventDefault();
+          textInner.blur();
         }
       };
     }
@@ -2667,10 +2847,15 @@
       if (!slide) return;
 
       const items = slide.elements
-        .filter((e) => this.selectedElementIds.includes(e.id))
+        .filter((e) => this.selectedElementIds.includes(e.id) && !e.locked)
         .map((e) => ({ id: e.id, initialX: e.x, initialY: e.y, width: e.width, height: e.height }));
 
+      if (items.length === 0) return;
+
       this.dragState = { startX, startY, items };
+      const gizmo = document.getElementById('selectionBox');
+      if (gizmo) gizmo.classList.add('is-dragging');
+      document.body.style.cursor = 'grabbing';
     }
 
     updateElementDrag(currentX, currentY, e) {
@@ -2682,37 +2867,138 @@
       const slide = this.getCurrentSlide();
       if (!slide) return;
 
-      // Smart Snapping to Slide Center and Edges
       let snapX = null;
       let snapY = null;
 
-      if (this.dragState.items.length === 1) {
+      // Smart Snapping (hold Alt to bypass for unrestricted precision dragging)
+      if (!e.altKey && this.dragState.items.length === 1) {
         const item = this.dragState.items[0];
         let targetX = item.initialX + dx;
         let targetY = item.initialY + dy;
+        const SNAP_DIST = 14;
 
-        // Snap X (Left, Center, Right)
-        if (Math.abs(targetX) < SNAP_THRESHOLD) {
+        // 1. Snapping to Slide Center and Edges
+        // X-axis: Left edge (0), Center (960), Right edge (1920)
+        if (Math.abs(targetX) < SNAP_DIST) {
           targetX = 0;
           snapX = 0;
-        } else if (Math.abs(targetX + item.width / 2 - CANVAS_WIDTH / 2) < SNAP_THRESHOLD) {
+        } else if (Math.abs(targetX + item.width / 2 - CANVAS_WIDTH / 2) < SNAP_DIST) {
           targetX = CANVAS_WIDTH / 2 - item.width / 2;
           snapX = CANVAS_WIDTH / 2;
-        } else if (Math.abs(targetX + item.width - CANVAS_WIDTH) < SNAP_THRESHOLD) {
+        } else if (Math.abs(targetX + item.width - CANVAS_WIDTH) < SNAP_DIST) {
           targetX = CANVAS_WIDTH - item.width;
           snapX = CANVAS_WIDTH;
         }
 
-        // Snap Y (Top, Middle, Bottom)
-        if (Math.abs(targetY) < SNAP_THRESHOLD) {
+        // Y-axis: Top edge (0), Middle (540), Bottom edge (1080)
+        if (Math.abs(targetY) < SNAP_DIST) {
           targetY = 0;
           snapY = 0;
-        } else if (Math.abs(targetY + item.height / 2 - CANVAS_HEIGHT / 2) < SNAP_THRESHOLD) {
+        } else if (Math.abs(targetY + item.height / 2 - CANVAS_HEIGHT / 2) < SNAP_DIST) {
           targetY = CANVAS_HEIGHT / 2 - item.height / 2;
           snapY = CANVAS_HEIGHT / 2;
-        } else if (Math.abs(targetY + item.height - CANVAS_HEIGHT) < SNAP_THRESHOLD) {
+        } else if (Math.abs(targetY + item.height - CANVAS_HEIGHT) < SNAP_DIST) {
           targetY = CANVAS_HEIGHT - item.height;
           snapY = CANVAS_HEIGHT;
+        }
+
+        // 1.5. Snapping to User-Created Custom Guidelines
+        if (this.customGuides) {
+          (this.customGuides.x || []).forEach((gx) => {
+            if (snapX === null) {
+              if (Math.abs(targetX - gx) < SNAP_DIST) {
+                targetX = gx;
+                snapX = gx;
+              } else if (Math.abs(targetX + item.width / 2 - gx) < SNAP_DIST) {
+                targetX = gx - item.width / 2;
+                snapX = gx;
+              } else if (Math.abs(targetX + item.width - gx) < SNAP_DIST) {
+                targetX = gx - item.width;
+                snapX = gx;
+              }
+            }
+          });
+          (this.customGuides.y || []).forEach((gy) => {
+            if (snapY === null) {
+              if (Math.abs(targetY - gy) < SNAP_DIST) {
+                targetY = gy;
+                snapY = gy;
+              } else if (Math.abs(targetY + item.height / 2 - gy) < SNAP_DIST) {
+                targetY = gy - item.height / 2;
+                snapY = gy;
+              } else if (Math.abs(targetY + item.height - gy) < SNAP_DIST) {
+                targetY = gy - item.height;
+                snapY = gy;
+              }
+            }
+          });
+        }
+
+        // 2. Snapping to Other Elements on the Slide
+        const otherElements = (slide.elements || []).filter(
+          (other) => other.id !== item.id && !other.locked
+        );
+
+        for (const other of otherElements) {
+          // Snap X if not already snapped to slide bounds
+          if (snapX === null) {
+            // Left to Left
+            if (Math.abs(targetX - other.x) < SNAP_DIST) {
+              targetX = other.x;
+              snapX = other.x;
+            }
+            // Center to Center
+            else if (Math.abs(targetX + item.width / 2 - (other.x + other.width / 2)) < SNAP_DIST) {
+              targetX = other.x + other.width / 2 - item.width / 2;
+              snapX = other.x + other.width / 2;
+            }
+            // Right to Right
+            else if (Math.abs(targetX + item.width - (other.x + other.width)) < SNAP_DIST) {
+              targetX = other.x + other.width - item.width;
+              snapX = other.x + other.width;
+            }
+            // Left to Right edge
+            else if (Math.abs(targetX - (other.x + other.width)) < SNAP_DIST) {
+              targetX = other.x + other.width;
+              snapX = other.x + other.width;
+            }
+            // Right to Left edge
+            else if (Math.abs(targetX + item.width - other.x) < SNAP_DIST) {
+              targetX = other.x - item.width;
+              snapX = other.x;
+            }
+          }
+
+          // Snap Y if not already snapped to slide bounds
+          if (snapY === null) {
+            // Top to Top
+            if (Math.abs(targetY - other.y) < SNAP_DIST) {
+              targetY = other.y;
+              snapY = other.y;
+            }
+            // Middle to Middle
+            else if (Math.abs(targetY + item.height / 2 - (other.y + other.height / 2)) < SNAP_DIST) {
+              targetY = other.y + other.height / 2 - item.height / 2;
+              snapY = other.y + other.height / 2;
+            }
+            // Bottom to Bottom
+            else if (Math.abs(targetY + item.height - (other.y + other.height)) < SNAP_DIST) {
+              targetY = other.y + other.height - item.height;
+              snapY = other.y + other.height;
+            }
+            // Top to Bottom edge
+            else if (Math.abs(targetY - (other.y + other.height)) < SNAP_DIST) {
+              targetY = other.y + other.height;
+              snapY = other.y + other.height;
+            }
+            // Bottom to Top edge
+            else if (Math.abs(targetY + item.height - other.y) < SNAP_DIST) {
+              targetY = other.y - item.height;
+              snapY = other.y;
+            }
+          }
+
+          if (snapX !== null && snapY !== null) break;
         }
 
         dx = targetX - item.initialX;
@@ -2724,8 +3010,8 @@
       this.dragState.items.forEach((item) => {
         const el = slide.elements.find((e) => e.id === item.id);
         if (el) {
-          el.x = item.initialX + dx;
-          el.y = item.initialY + dy;
+          el.x = Math.round(item.initialX + dx);
+          el.y = Math.round(item.initialY + dy);
 
           const elDom = document.getElementById(`canvas_el_${el.id}`);
           if (elDom) {
@@ -2834,30 +3120,98 @@
     updateElementRotate(e) {
       if (!this.rotateState) return;
 
-      const canvasEl = document.getElementById('slideCanvas');
-      const rect = canvasEl.getBoundingClientRect();
       const slidePt = this.screenToSlide(e.clientX, e.clientY);
-
       const dx = slidePt.x - this.rotateState.centerX;
       const dy = slidePt.y - this.rotateState.centerY;
 
-      let deg = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+      // Calculate raw angle where handle at top is 0° upright
+      const rawDeg = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+      const normalizedDeg = (rawDeg % 360 + 360) % 360;
 
-      // Snap to 15-degree steps if Shift key is held
+      let finalDeg = normalizedDeg;
+      let isCardinalSnap = false;
+      let snapAxisLabel = '';
+
+      // 1. Keyboard Modifier: Shift -> Strict 15° step increments
       if (e.shiftKey) {
-        deg = Math.round(deg / 15) * 15;
+        finalDeg = Math.round(normalizedDeg / 15) * 15;
+        finalDeg = (finalDeg % 360 + 360) % 360;
+
+        // If Shift lands on a cardinal axis, also trigger cardinal feedback
+        const cardinals = [0, 90, 180, 270, 360];
+        const matched = cardinals.find((c) => Math.abs(finalDeg - c) === 0);
+        if (matched !== undefined) {
+          isCardinalSnap = true;
+          const cardinal = matched === 360 ? 0 : matched;
+          finalDeg = cardinal;
+          snapAxisLabel = (cardinal === 0 || cardinal === 180) ? '🎯 Parallel to X-Axis' : '🎯 Parallel to Y-Axis';
+        }
+      }
+      // 2. Keyboard Modifier: Alt -> Bypass magnetic snapping entirely for smooth, free-angle rotation
+      else if (e.altKey) {
+        finalDeg = Math.round(normalizedDeg * 10) / 10;
+        isCardinalSnap = false;
+      }
+      // 3. Normal Manual Rotation: Magnetic cardinal snapping (tight ±1.2° threshold)
+      else {
+        const MAGNETIC_SNAP_THRESHOLD = 1.2;
+
+        const diff0 = Math.min(normalizedDeg, 360 - normalizedDeg);
+        if (diff0 <= MAGNETIC_SNAP_THRESHOLD) {
+          finalDeg = 0;
+          isCardinalSnap = true;
+          snapAxisLabel = '🎯 Parallel to X-Axis';
+        } else if (Math.abs(normalizedDeg - 90) <= MAGNETIC_SNAP_THRESHOLD) {
+          finalDeg = 90;
+          isCardinalSnap = true;
+          snapAxisLabel = '🎯 Parallel to Y-Axis';
+        } else if (Math.abs(normalizedDeg - 180) <= MAGNETIC_SNAP_THRESHOLD) {
+          finalDeg = 180;
+          isCardinalSnap = true;
+          snapAxisLabel = '🎯 Parallel to X-Axis';
+        } else if (Math.abs(normalizedDeg - 270) <= MAGNETIC_SNAP_THRESHOLD) {
+          finalDeg = 270;
+          isCardinalSnap = true;
+          snapAxisLabel = '🎯 Parallel to Y-Axis';
+        } else {
+          finalDeg = Math.round(normalizedDeg);
+          isCardinalSnap = false;
+        }
       }
 
       const slide = this.getCurrentSlide();
-      const el = slide.elements.find((item) => item.id === this.rotateState.elId);
+      const el = slide ? slide.elements.find((item) => item.id === this.rotateState.elId) : null;
       if (el) {
-        el.rotation = Math.round(deg);
+        el.rotation = finalDeg;
         const elDom = document.getElementById(`canvas_el_${el.id}`);
         if (elDom) {
           elDom.style.transform = `rotate(${el.rotation}deg)`;
         }
         this.updateSelectionGizmo();
         this.populateElementInspectorLive();
+
+        // Visual Feedback & Guides
+        if (isCardinalSnap) {
+          this.showCardinalGuides(this.rotateState.centerX, this.rotateState.centerY);
+          this.showRotationSnapTooltip(snapAxisLabel, finalDeg, el);
+        } else {
+          this.hideGuides();
+          this.hideRotationSnapTooltip();
+        }
+
+        // Live badge feedback during rotation
+        const badge = document.getElementById('selectionBadge');
+        if (badge) {
+          if (isCardinalSnap) {
+            badge.textContent = `${Math.round(finalDeg)}° • ${snapAxisLabel.replace('🎯 ', '')}`;
+          } else if (e.shiftKey) {
+            badge.textContent = `${Math.round(finalDeg)}° (Shift 15°)`;
+          } else if (e.altKey) {
+            badge.textContent = `${finalDeg.toFixed(1)}° (Free Alt)`;
+          } else {
+            badge.textContent = `${Math.round(finalDeg)}°`;
+          }
+        }
       }
     }
 
@@ -2910,6 +3264,7 @@
       const gy = document.getElementById('guideLineY');
 
       if (gy) {
+        gy.classList.remove('guide-cardinal');
         if (x !== null) {
           gy.style.display = 'block';
           gy.style.left = `${x}px`;
@@ -2919,6 +3274,7 @@
       }
 
       if (gx) {
+        gx.classList.remove('guide-cardinal');
         if (y !== null) {
           gx.style.display = 'block';
           gx.style.top = `${y}px`;
@@ -2928,11 +3284,762 @@
       }
     }
 
+    showCardinalGuides(centerX, centerY) {
+      const gx = document.getElementById('guideLineX');
+      const gy = document.getElementById('guideLineY');
+      if (gx) {
+        gx.style.display = 'block';
+        gx.style.top = `${centerY}px`;
+        gx.classList.add('guide-cardinal');
+      }
+      if (gy) {
+        gy.style.display = 'block';
+        gy.style.left = `${centerX}px`;
+        gy.classList.add('guide-cardinal');
+      }
+    }
+
+    showRotationSnapTooltip(label, deg, el) {
+      const tooltip = document.getElementById('rotationSnapTooltip');
+      const labelEl = document.getElementById('rotationSnapLabel');
+      if (!tooltip || !labelEl || !this.rotateState) return;
+
+      labelEl.textContent = `${label} (${Math.round(deg)}°)`;
+
+      // Position tooltip safely above the rotating element
+      const maxDim = el ? Math.max(el.width, el.height) : 100;
+      let topY = this.rotateState.centerY - maxDim / 2 - 58;
+      if (topY < 24) {
+        topY = this.rotateState.centerY + maxDim / 2 + 32;
+      }
+
+      tooltip.style.left = `${this.rotateState.centerX}px`;
+      tooltip.style.top = `${topY}px`;
+      tooltip.classList.add('active');
+
+      const rotateHandle = document.getElementById('handleRotate');
+      if (rotateHandle) rotateHandle.classList.add('is-snapped');
+    }
+
+    hideRotationSnapTooltip() {
+      const tooltip = document.getElementById('rotationSnapTooltip');
+      if (tooltip) tooltip.classList.remove('active');
+      const rotateHandle = document.getElementById('handleRotate');
+      if (rotateHandle) rotateHandle.classList.remove('is-snapped');
+    }
+
     hideGuides() {
       const gx = document.getElementById('guideLineX');
       const gy = document.getElementById('guideLineY');
-      if (gx) gx.style.display = 'none';
-      if (gy) gy.style.display = 'none';
+      if (gx) {
+        gx.style.display = 'none';
+        gx.classList.remove('guide-cardinal');
+      }
+      if (gy) {
+        gy.style.display = 'none';
+        gy.classList.remove('guide-cardinal');
+      }
+    }
+
+    // =========================================================================
+    // CANVAS RULER SYSTEM & COORDINATE BOUNDS HIGHLIGHTING
+    // =========================================================================
+    initRulers() {
+      const topCanvas = document.getElementById('rulerTopCanvas');
+      const leftCanvas = document.getElementById('rulerLeftCanvas');
+      const corner = document.getElementById('rulerCorner');
+      const workspaceArea = document.getElementById('canvasWorkspaceArea');
+      const scrollContainer = document.getElementById('canvasScrollContainer');
+
+      if (corner) {
+        corner.addEventListener('click', () => {
+          this.toggleRulers();
+        });
+        corner.addEventListener('dblclick', () => {
+          this.autoFitZoom = true;
+          this.fitCanvasToViewport();
+          this.showToast('Reset slide view to fit viewport', 'info');
+        });
+      }
+
+      // Mouse position tracker on workspace for live ruler hairlines
+      if (workspaceArea) {
+        workspaceArea.addEventListener('pointermove', (e) => {
+          if (!this.showRulers) return;
+          const pt = this.screenToSlide(e.clientX, e.clientY);
+          this.mouseRulerPos = {
+            x: pt.x,
+            y: pt.y,
+            clientX: e.clientX,
+            clientY: e.clientY
+          };
+          this.renderRulers();
+        });
+
+        workspaceArea.addEventListener('pointerleave', () => {
+          if (!this.showRulers) return;
+          this.mouseRulerPos = null;
+          this.renderRulers();
+        });
+      }
+
+      // Scroll synchronization
+      if (scrollContainer) {
+        scrollContainer.addEventListener(
+          'scroll',
+          () => {
+            if (this.showRulers) {
+              this.renderRulers();
+            }
+          },
+          { passive: true }
+        );
+      }
+
+      // Interactive Guide Dragging from Rulers
+      if (topCanvas) {
+        topCanvas.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          this.startRulerGuideDrag('horizontal', e);
+        });
+      }
+
+      if (leftCanvas) {
+        leftCanvas.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          this.startRulerGuideDrag('vertical', e);
+        });
+      }
+
+      // Initial render on next animation frame
+      requestAnimationFrame(() => this.renderRulers());
+    }
+
+    toggleRulers(forceState) {
+      if (typeof forceState === 'boolean') {
+        this.showRulers = forceState;
+      } else {
+        this.showRulers = !this.showRulers;
+      }
+
+      const workspaceArea = document.getElementById('canvasWorkspaceArea');
+      if (workspaceArea) {
+        workspaceArea.classList.toggle('rulers-hidden', !this.showRulers);
+      }
+
+      const ribbonBtn = document.getElementById('ribbonToggleRuler');
+      if (ribbonBtn) {
+        ribbonBtn.classList.toggle('toggle-active', this.showRulers);
+      }
+
+      const menuBtn = document.getElementById('menuToggleRulers');
+      if (menuBtn) {
+        menuBtn.classList.toggle('active', this.showRulers);
+      }
+
+      if (this.showRulers) {
+        requestAnimationFrame(() => this.renderRulers());
+        this.showToast('Canvas rulers enabled', 'info');
+      } else {
+        this.showToast('Canvas rulers hidden', 'info');
+      }
+
+      if (this.autoFitZoom) {
+        setTimeout(() => this.fitCanvasToViewport(), 50);
+      }
+    }
+
+    getSelectedElementsBoundingBox() {
+      const slide = this.getCurrentSlide();
+      if (!slide || !this.selectedElementIds || this.selectedElementIds.length === 0) return null;
+
+      const selected = slide.elements.filter((e) => this.selectedElementIds.includes(e.id));
+      if (selected.length === 0) return null;
+
+      let minX = Infinity,
+        maxX = -Infinity,
+        minY = Infinity,
+        maxY = -Infinity;
+
+      selected.forEach((el) => {
+        const rot = el.rotation || 0;
+        if (rot === 0) {
+          minX = Math.min(minX, el.x);
+          maxX = Math.max(maxX, el.x + el.width);
+          minY = Math.min(minY, el.y);
+          maxY = Math.max(maxY, el.y + el.height);
+        } else {
+          const cx = el.x + el.width / 2;
+          const cy = el.y + el.height / 2;
+          const rad = (rot * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const hw = el.width / 2;
+          const hh = el.height / 2;
+          const corners = [
+            [-hw, -hh],
+            [hw, -hh],
+            [hw, hh],
+            [-hw, hh]
+          ];
+          for (let i = 0; i < 4; i++) {
+            const rx = cx + corners[i][0] * cos - corners[i][1] * sin;
+            const ry = cy + corners[i][0] * sin + corners[i][1] * cos;
+            minX = Math.min(minX, rx);
+            maxX = Math.max(maxX, rx);
+            minY = Math.min(minY, ry);
+            maxY = Math.max(maxY, ry);
+          }
+        }
+      });
+
+      if (minX === Infinity) return null;
+      return {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        width: maxX - minX,
+        height: maxY - minY,
+        count: selected.length
+      };
+    }
+
+    renderRulers() {
+      if (!this.showRulers) return;
+
+      const topCanvas = document.getElementById('rulerTopCanvas');
+      const leftCanvas = document.getElementById('rulerLeftCanvas');
+      const slideEl = document.getElementById('slideCanvas');
+      const topContainer = document.getElementById('rulerTopContainer');
+      const leftContainer = document.getElementById('rulerLeftContainer');
+
+      if (!topCanvas || !leftCanvas || !slideEl || !topContainer || !leftContainer) return;
+
+      const topRect = topCanvas.getBoundingClientRect();
+      const leftRect = leftCanvas.getBoundingClientRect();
+      const slideRect = slideEl.getBoundingClientRect();
+
+      if (topRect.width === 0 || leftRect.height === 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+
+      // Sizing buffers for crisp high-DPI display
+      const topW = Math.round(topRect.width);
+      const topH = Math.round(topRect.height);
+      const topTargetW = Math.round(topW * dpr);
+      const topTargetH = Math.round(topH * dpr);
+      if (topCanvas.width !== topTargetW || topCanvas.height !== topTargetH) {
+        topCanvas.width = topTargetW;
+        topCanvas.height = topTargetH;
+      }
+
+      const leftW = Math.round(leftRect.width);
+      const leftH = Math.round(leftRect.height);
+      const leftTargetW = Math.round(leftW * dpr);
+      const leftTargetH = Math.round(leftH * dpr);
+      if (leftCanvas.width !== leftTargetW || leftCanvas.height !== leftTargetH) {
+        leftCanvas.width = leftTargetW;
+        leftCanvas.height = leftTargetH;
+      }
+
+      const scaleX = slideRect.width / CANVAS_WIDTH;
+      const scaleY = slideRect.height / CANVAS_HEIGHT;
+      const zeroX = slideRect.left - topRect.left;
+      const zeroY = slideRect.top - leftRect.top;
+
+      const selectedBounds = this.getSelectedElementsBoundingBox();
+      const mousePos = this.mouseRulerPos;
+
+      this.drawTopRuler(topCanvas, dpr, topW, topH, zeroX, scaleX, selectedBounds, mousePos);
+      this.drawLeftRuler(leftCanvas, dpr, leftW, leftH, zeroY, scaleY, selectedBounds, mousePos);
+    }
+
+    drawTopRuler(canvas, dpr, width, height, zeroX, scaleX, selectedBounds, mousePos) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Base background (out-of-bounds canvas area)
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(0, 0, width, height);
+
+      // Active slide track (0 to CANVAS_WIDTH in screen coordinates)
+      const slideLeft = zeroX;
+      const slideRight = zeroX + CANVAS_WIDTH * scaleX;
+      const trackStart = Math.max(0, slideLeft);
+      const trackEnd = Math.min(width, slideRight);
+
+      if (trackEnd > trackStart) {
+        ctx.fillStyle = '#111827';
+        ctx.fillRect(trackStart, 0, trackEnd - trackStart, height);
+      }
+
+      // Bottom border line for ruler
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(0, height - 1, width, 1);
+
+      // Selected Element's Bounds Highlight
+      if (selectedBounds) {
+        const selStart = zeroX + selectedBounds.minX * scaleX;
+        const selEnd = zeroX + selectedBounds.maxX * scaleX;
+        const selWidth = Math.max(1, selEnd - selStart);
+
+        // Highlight background band
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.3)';
+        ctx.fillRect(selStart, 0, selWidth, height - 1);
+
+        // Top accent line
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(selStart, 0, selWidth, 2);
+
+        // Vertical boundary pins
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(selStart - 0.5, 0, 1.5, height - 1);
+        ctx.fillRect(selEnd - 0.5, 0, 1.5, height - 1);
+
+        // Inverted pointer triangles at start and end
+        ctx.beginPath();
+        ctx.moveTo(selStart - 3, 0);
+        ctx.lineTo(selStart + 3, 0);
+        ctx.lineTo(selStart, 4.5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(selEnd - 3, 0);
+        ctx.lineTo(selEnd + 3, 0);
+        ctx.lineTo(selEnd, 4.5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Label in the middle if there is space
+        if (selWidth >= 38) {
+          const midX = (selStart + selEnd) / 2;
+          const wLabel = `${Math.round(selectedBounds.width)}px`;
+          ctx.font = '600 8.5px ui-monospace, SFMono-Regular, monospace';
+          const tw = ctx.measureText(wLabel).width;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+          ctx.beginPath();
+          ctx.roundRect(midX - tw / 2 - 3, 2, tw + 6, 11, 2);
+          ctx.fill();
+          ctx.fillStyle = '#38bdf8';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(wLabel, midX, 7.5);
+        }
+      }
+
+      // Dynamic Tick Steps based on Zoom
+      const targetSpacing = 60;
+      const roughStep = targetSpacing / scaleX;
+      const intervals = [10, 20, 50, 100, 200, 500, 1000];
+      let majorStep = intervals[intervals.length - 1];
+      for (let i = 0; i < intervals.length; i++) {
+        if (intervals[i] >= roughStep) {
+          majorStep = intervals[i];
+          break;
+        }
+      }
+
+      const minorStep =
+        majorStep >= 200
+          ? majorStep / 4
+          : majorStep >= 100
+          ? 20
+          : majorStep >= 50
+          ? 10
+          : 5;
+
+      const visibleMinX = (0 - zeroX) / scaleX;
+      const visibleMaxX = (width - zeroX) / scaleX;
+      const startTick = Math.floor(visibleMinX / minorStep) * minorStep;
+      const endTick = Math.ceil(visibleMaxX / minorStep) * minorStep;
+
+      // Draw Ticks
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      for (let val = startTick; val <= endTick; val += minorStep) {
+        const rx = Math.round(zeroX + val * scaleX) + 0.5;
+        if (rx < -15 || rx > width + 15) continue;
+
+        const isOrigin = val === 0;
+        const isCanvasEdge = val === CANVAS_WIDTH;
+        const isMajor = Math.abs(val % majorStep) < 0.001;
+        const isMedium = Math.abs(val % (majorStep / 2)) < 0.001;
+
+        if (isOrigin || isCanvasEdge) {
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(rx, 6);
+          ctx.lineTo(rx, height - 1);
+          ctx.stroke();
+
+          ctx.font = '700 9px ui-monospace, SFMono-Regular, monospace';
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillText(isOrigin ? '0' : '1920', rx, 2);
+        } else if (isMajor) {
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(rx, 14);
+          ctx.lineTo(rx, height - 1);
+          ctx.stroke();
+
+          ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillText(String(Math.round(val)), rx, 3);
+        } else if (isMedium) {
+          ctx.strokeStyle = '#475569';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(rx, 17);
+          ctx.lineTo(rx, height - 1);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(rx, 20);
+          ctx.lineTo(rx, height - 1);
+          ctx.stroke();
+        }
+      }
+
+      // Mouse Hairline Tracker
+      if (mousePos) {
+        const mouseRx = Math.round(zeroX + mousePos.x * scaleX) + 0.5;
+        if (mouseRx >= 0 && mouseRx <= width) {
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(mouseRx, 0);
+          ctx.lineTo(mouseRx, height - 1);
+          ctx.stroke();
+
+          const coordText = `${Math.round(mousePos.x)}`;
+          ctx.font = '700 8px ui-monospace, SFMono-Regular, monospace';
+          const tw = ctx.measureText(coordText).width;
+          const badgeX = Math.max(1, Math.min(width - tw - 6, mouseRx - tw / 2 - 3));
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillRect(badgeX, 0, tw + 6, 9);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(coordText, badgeX + (tw + 6) / 2, 1);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    drawLeftRuler(canvas, dpr, width, height, zeroY, scaleY, selectedBounds, mousePos) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Base background (out-of-bounds canvas area)
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(0, 0, width, height);
+
+      // Active slide track (0 to CANVAS_HEIGHT in screen coordinates)
+      const slideTop = zeroY;
+      const slideBottom = zeroY + CANVAS_HEIGHT * scaleY;
+      const trackStart = Math.max(0, slideTop);
+      const trackEnd = Math.min(height, slideBottom);
+
+      if (trackEnd > trackStart) {
+        ctx.fillStyle = '#111827';
+        ctx.fillRect(0, trackStart, width, trackEnd - trackStart);
+      }
+
+      // Right border line for ruler
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(width - 1, 0, 1, height);
+
+      // Selected Element's Bounds Highlight
+      if (selectedBounds) {
+        const selStart = zeroY + selectedBounds.minY * scaleY;
+        const selEnd = zeroY + selectedBounds.maxY * scaleY;
+        const selHeight = Math.max(1, selEnd - selStart);
+
+        // Highlight background band
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.3)';
+        ctx.fillRect(0, selStart, width - 1, selHeight);
+
+        // Left accent line
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(0, selStart, 2, selHeight);
+
+        // Horizontal boundary pins
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(0, selStart - 0.5, width - 1, 1.5);
+        ctx.fillRect(0, selEnd - 0.5, width - 1, 1.5);
+
+        // Inverted pointer triangles at start and end
+        ctx.beginPath();
+        ctx.moveTo(0, selStart - 3);
+        ctx.lineTo(0, selStart + 3);
+        ctx.lineTo(4.5, selStart);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(0, selEnd - 3);
+        ctx.lineTo(0, selEnd + 3);
+        ctx.lineTo(4.5, selEnd);
+        ctx.closePath();
+        ctx.fill();
+
+        // Label in the middle if there is space
+        if (selHeight >= 38) {
+          const midY = (selStart + selEnd) / 2;
+          const hLabel = `${Math.round(selectedBounds.height)}px`;
+          ctx.save();
+          ctx.translate(width / 2, midY);
+          ctx.rotate(-Math.PI / 2);
+          ctx.font = '600 8.5px ui-monospace, SFMono-Regular, monospace';
+          const tw = ctx.measureText(hLabel).width;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+          ctx.beginPath();
+          ctx.roundRect(-tw / 2 - 3, -5.5, tw + 6, 11, 2);
+          ctx.fill();
+          ctx.fillStyle = '#38bdf8';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(hLabel, 0, 0);
+          ctx.restore();
+        }
+      }
+
+      // Dynamic Tick Steps based on Zoom
+      const targetSpacing = 60;
+      const roughStep = targetSpacing / scaleY;
+      const intervals = [10, 20, 50, 100, 200, 500, 1000];
+      let majorStep = intervals[intervals.length - 1];
+      for (let i = 0; i < intervals.length; i++) {
+        if (intervals[i] >= roughStep) {
+          majorStep = intervals[i];
+          break;
+        }
+      }
+
+      const minorStep =
+        majorStep >= 200
+          ? majorStep / 4
+          : majorStep >= 100
+          ? 20
+          : majorStep >= 50
+          ? 10
+          : 5;
+
+      const visibleMinY = (0 - zeroY) / scaleY;
+      const visibleMaxY = (height - zeroY) / scaleY;
+      const startTick = Math.floor(visibleMinY / minorStep) * minorStep;
+      const endTick = Math.ceil(visibleMaxY / minorStep) * minorStep;
+
+      // Draw Ticks
+      for (let val = startTick; val <= endTick; val += minorStep) {
+        const ry = Math.round(zeroY + val * scaleY) + 0.5;
+        if (ry < -15 || ry > height + 15) continue;
+
+        const isOrigin = val === 0;
+        const isCanvasEdge = val === CANVAS_HEIGHT;
+        const isMajor = Math.abs(val % majorStep) < 0.001;
+        const isMedium = Math.abs(val % (majorStep / 2)) < 0.001;
+
+        if (isOrigin || isCanvasEdge) {
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(6, ry);
+          ctx.lineTo(width - 1, ry);
+          ctx.stroke();
+
+          ctx.save();
+          ctx.translate(6.5, ry);
+          ctx.rotate(-Math.PI / 2);
+          ctx.font = '700 9px ui-monospace, SFMono-Regular, monospace';
+          ctx.fillStyle = '#38bdf8';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(isOrigin ? '0' : '1080', 0, 0);
+          ctx.restore();
+        } else if (isMajor) {
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(14, ry);
+          ctx.lineTo(width - 1, ry);
+          ctx.stroke();
+
+          ctx.save();
+          ctx.translate(7.5, ry);
+          ctx.rotate(-Math.PI / 2);
+          ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
+          ctx.fillStyle = '#94a3b8';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(Math.round(val)), 0, 0);
+          ctx.restore();
+        } else if (isMedium) {
+          ctx.strokeStyle = '#475569';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(17, ry);
+          ctx.lineTo(width - 1, ry);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(20, ry);
+          ctx.lineTo(width - 1, ry);
+          ctx.stroke();
+        }
+      }
+
+      // Mouse Hairline Tracker
+      if (mousePos) {
+        const mouseRy = Math.round(zeroY + mousePos.y * scaleY) + 0.5;
+        if (mouseRy >= 0 && mouseRy <= height) {
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, mouseRy);
+          ctx.lineTo(width - 1, mouseRy);
+          ctx.stroke();
+
+          const coordText = `${Math.round(mousePos.y)}`;
+          ctx.save();
+          ctx.translate(width - 5, mouseRy);
+          ctx.rotate(-Math.PI / 2);
+          ctx.font = '700 8px ui-monospace, SFMono-Regular, monospace';
+          const tw = ctx.measureText(coordText).width;
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillRect(-tw / 2 - 3, -4.5, tw + 6, 9);
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(coordText, 0, 0);
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    startRulerGuideDrag(axis, startEvent) {
+      const isHorizontal = axis === 'horizontal';
+      const preview = document.createElement('div');
+      preview.className = `ruler-guide-preview ${isHorizontal ? 'horizontal' : 'vertical'}`;
+
+      const tag = document.createElement('div');
+      tag.className = 'ruler-guide-preview-tag';
+      preview.appendChild(tag);
+      document.body.appendChild(preview);
+
+      const updatePos = (clientX, clientY) => {
+        const pt = this.screenToSlide(clientX, clientY);
+        if (isHorizontal) {
+          preview.style.top = `${clientY}px`;
+          tag.textContent = `Y: ${Math.round(pt.y)}px`;
+          tag.style.left = `${Math.max(40, clientX + 15)}px`;
+          tag.style.top = '-24px';
+        } else {
+          preview.style.left = `${clientX}px`;
+          tag.textContent = `X: ${Math.round(pt.x)}px`;
+          tag.style.top = `${Math.max(40, clientY + 15)}px`;
+          tag.style.left = '6px';
+        }
+      };
+
+      updatePos(startEvent.clientX, startEvent.clientY);
+      document.body.style.cursor = isHorizontal ? 'row-resize' : 'col-resize';
+
+      const onPointerMove = (e) => {
+        updatePos(e.clientX, e.clientY);
+      };
+
+      const onPointerUp = (e) => {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        document.body.style.cursor = '';
+        preview.remove();
+
+        const pt = this.screenToSlide(e.clientX, e.clientY);
+        if (isHorizontal) {
+          const y = Math.round(pt.y);
+          if (y >= -500 && y <= CANVAS_HEIGHT + 500) {
+            this.addCustomGuide('y', y);
+          }
+        } else {
+          const x = Math.round(pt.x);
+          if (x >= -500 && x <= CANVAS_WIDTH + 500) {
+            this.addCustomGuide('x', x);
+          }
+        }
+      };
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    }
+
+    addCustomGuide(axis, coord) {
+      if (!this.customGuides[axis].includes(coord)) {
+        this.customGuides[axis].push(coord);
+        this.renderCustomGuides();
+        this.showToast(
+          `Added ${axis === 'y' ? 'horizontal' : 'vertical'} guideline at ${coord}px (double-click guide to remove)`,
+          'info'
+        );
+      }
+    }
+
+    removeCustomGuide(axis, coord) {
+      this.customGuides[axis] = this.customGuides[axis].filter((c) => c !== coord);
+      this.renderCustomGuides();
+      this.showToast(`Removed guideline at ${coord}px`, 'info');
+    }
+
+    renderCustomGuides() {
+      const guidesLayer = document.getElementById('canvasGuidesLayer');
+      if (!guidesLayer) return;
+
+      // Remove previous custom user guides
+      guidesLayer.querySelectorAll('.user-guide-line').forEach((el) => el.remove());
+
+      // Render horizontal user guides
+      (this.customGuides.y || []).forEach((y) => {
+        const line = document.createElement('div');
+        line.className = 'user-guide-line guide-x';
+        line.style.top = `${y}px`;
+        line.title = `Guideline Y: ${y}px (Double-click to remove)`;
+        line.innerHTML = `<span class="user-guide-tag">Y: ${y}px</span>`;
+        line.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this.removeCustomGuide('y', y);
+        });
+        guidesLayer.appendChild(line);
+      });
+
+      // Render vertical user guides
+      (this.customGuides.x || []).forEach((x) => {
+        const line = document.createElement('div');
+        line.className = 'user-guide-line guide-y';
+        line.style.left = `${x}px`;
+        line.title = `Guideline X: ${x}px (Double-click to remove)`;
+        line.innerHTML = `<span class="user-guide-tag">X: ${x}px</span>`;
+        line.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this.removeCustomGuide('x', x);
+        });
+        guidesLayer.appendChild(line);
+      });
     }
 
     populateElementInspectorLive() {
@@ -2965,28 +4072,43 @@
       this.presentationStep = 0;
       this.presentationLaserActive = false;
 
-      const overlay = document.getElementById('presentationOverlay');
+      const overlay = document.getElementById('presentation-mode') ||
+                      document.getElementById('presentationOverlay') ||
+                      document.getElementById('fullscreen-container');
       if (overlay) {
         overlay.classList.add('active');
         overlay.focus();
       }
 
-      // Try native fullscreen
+      // Try native fullscreen (standard and webkit prefixed)
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
       }
 
       this.renderPresentationSlide();
+      this.updatePresentationScale();
       this.bindPresentationKeys();
+
+      // Recalculate scaling after asynchronous viewport changes & mobile fullscreen transitions
+      requestAnimationFrame(() => this.updatePresentationScale());
+      setTimeout(() => this.updatePresentationScale(), 50);
+      setTimeout(() => this.updatePresentationScale(), 150);
+      setTimeout(() => this.updatePresentationScale(), 350);
     }
 
     exitPresentation() {
       this.isPresentationActive = false;
-      const overlay = document.getElementById('presentationOverlay');
+      const overlay = document.getElementById('presentation-mode') ||
+                      document.getElementById('presentationOverlay') ||
+                      document.getElementById('fullscreen-container');
       if (overlay) overlay.classList.remove('active');
 
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
+      } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
       }
 
       // Stop any running media
@@ -2996,6 +4118,44 @@
           m.pause();
         });
       }
+
+      // Re-fit canvas to viewport when returning to editor mode
+      setTimeout(() => {
+        if (this.autoFitZoom) {
+          this.fitCanvasToViewport();
+        }
+      }, 100);
+    }
+
+    updatePresentationScale() {
+      if (!this.isPresentationActive) return;
+      const container = document.getElementById('presentationSlideContainer');
+      if (!container) return;
+
+      // 1. Remove any absolute pixel margins, top offsets, or transform-origin offsets inherited from editor canvas
+      container.style.width = '1920px';
+      container.style.height = '1080px';
+      container.style.minWidth = '1920px';
+      container.style.minHeight = '1080px';
+      container.style.maxWidth = '1920px';
+      container.style.maxHeight = '1080px';
+      container.style.flexShrink = '0';
+      container.style.flexGrow = '0';
+      container.style.position = 'relative';
+      container.style.top = 'auto';
+      container.style.left = 'auto';
+      container.style.right = 'auto';
+      container.style.bottom = 'auto';
+      container.style.margin = 'auto';
+
+      // 2. Dynamic scale calculation based on available viewport width and height
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const scale = Math.min(viewportWidth / 1920, viewportHeight / 1080);
+
+      // 3. Apply transform: scale(${scale}) and ensure no extra translation/offset transforms exist
+      container.style.transformOrigin = 'center center';
+      container.style.transform = `scale(${scale})`;
     }
 
     renderPresentationSlide() {
@@ -3022,11 +4182,8 @@
       container.style.opacity = '0';
       this.applySlideBackground(container, slide.background);
 
-      // Compute display scale for full screen letterbox
-      const winW = window.innerWidth;
-      const winH = window.innerHeight;
-      const scale = Math.min(winW / CANVAS_WIDTH, winH / CANVAS_HEIGHT);
-      container.style.transform = `scale(${scale})`;
+      // Apply Universal Fullscreen Scaling Engine
+      this.updatePresentationScale();
 
       container.innerHTML = '';
 
@@ -3154,7 +4311,8 @@
     }
 
     bindPresentationKeys() {
-      const overlay = document.getElementById('presentationOverlay');
+      const overlay = document.getElementById('presentation-mode') ||
+                      document.getElementById('presentationOverlay');
       if (!overlay) return;
 
       overlay.onkeydown = (e) => {
@@ -4070,6 +5228,24 @@
       document.getElementById('ribbonToggleNotes').onclick = toggleNotesDrawer;
       document.getElementById('menuToggleNotes').onclick = toggleNotesDrawer;
 
+      // Rulers and Grid Ribbon & Menu Toggles
+      const toggleRulerHandler = () => this.toggleRulers();
+      const rToggle = document.getElementById('ribbonToggleRuler');
+      if (rToggle) rToggle.onclick = toggleRulerHandler;
+      const mToggleR = document.getElementById('menuToggleRulers');
+      if (mToggleR) mToggleR.onclick = toggleRulerHandler;
+
+      const toggleGridHandler = () => {
+        this.snapToGrid = !this.snapToGrid;
+        const btn = document.getElementById('ribbonToggleGrid');
+        if (btn) btn.classList.toggle('toggle-active', this.snapToGrid);
+        this.showToast(`Grid snapping ${this.snapToGrid ? 'enabled' : 'disabled'}`, 'info');
+      };
+      const rGrid = document.getElementById('ribbonToggleGrid');
+      if (rGrid) rGrid.onclick = toggleGridHandler;
+      const mGrid = document.getElementById('menuToggleGrid');
+      if (mGrid) mGrid.onclick = toggleGridHandler;
+
       document.getElementById('slideNotesInput').oninput = (e) => {
         const slide = this.getCurrentSlide();
         if (slide) {
@@ -4153,6 +5329,9 @@
               this.updateStatusBar();
             }
           }
+        } else if (e.shiftKey && (e.key === 'R' || e.key === 'r') && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.toggleRulers();
         } else if (e.key === 'F5') {
           e.preventDefault();
           this.startPresentation(e.shiftKey);
@@ -4161,16 +5340,32 @@
             e.preventDefault();
             this.deleteSelectedElements();
           }
+        } else if (e.key === 'Enter' || e.key === 'F2') {
+          if (!this.isEditingText && this.selectedElementIds.length === 1) {
+            const slide = this.getCurrentSlide();
+            const el = slide ? slide.elements.find((item) => item.id === this.selectedElementIds[0]) : null;
+            if (el && el.type === 'text') {
+              const elDom = document.getElementById(`canvas_el_${el.id}`);
+              if (elDom) {
+                e.preventDefault();
+                this.enableInPlaceTextEditing(elDom, el);
+                return;
+              }
+            }
+          }
         } else if (e.key.startsWith('Arrow')) {
+          if (this.isEditingText) return;
+
           // Nudge selected elements
           if (this.selectedElementIds.length > 0) {
             e.preventDefault();
-            const step = e.shiftKey ? 10 : 1;
+            // Arrow = 5px, Shift+Arrow = 25px, Alt+Arrow = 1px for pixel perfection
+            const step = e.altKey ? 1 : (e.shiftKey ? 25 : 5);
             const slide = this.getCurrentSlide();
             if (!slide) return;
 
             slide.elements.forEach((el) => {
-              if (this.selectedElementIds.includes(el.id)) {
+              if (this.selectedElementIds.includes(el.id) && !el.locked) {
                 if (e.key === 'ArrowLeft') el.x -= step;
                 if (e.key === 'ArrowRight') el.x += step;
                 if (e.key === 'ArrowUp') el.y -= step;
@@ -4180,7 +5375,12 @@
 
             this.renderCanvas();
             this.populateElementInspectorLive();
-            this.pushHistory('Nudge');
+
+            clearTimeout(this._nudgeHistoryTimer);
+            this._nudgeHistoryTimer = setTimeout(() => {
+              this.pushHistory('Nudge elements');
+              this.renderThumbnails();
+            }, 300);
           }
         }
       });
@@ -4291,7 +5491,33 @@
         }
       };
 
+      // Alignment & Quick Positioning Controls
+      const bindAlignBtn = (id, alignMode) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.onclick = () => this.alignSelectedElements(alignMode);
+        }
+      };
+      bindAlignBtn('btnAlignElemLeft', 'left');
+      bindAlignBtn('btnAlignElemCenterH', 'centerH');
+      bindAlignBtn('btnAlignElemRight', 'right');
+      bindAlignBtn('btnAlignElemTop', 'top');
+      bindAlignBtn('btnAlignElemMiddleV', 'middleV');
+      bindAlignBtn('btnAlignElemBottom', 'bottom');
+      bindAlignBtn('btnCenterOnSlide', 'centerSlide');
+
       // Text Formatting
+      const btnEditInPlace = document.getElementById('btnEditTextInPlace');
+      if (btnEditInPlace) {
+        btnEditInPlace.onclick = () => {
+          const el = getActiveEl();
+          if (el && el.type === 'text') {
+            const elDom = document.getElementById(`canvas_el_${el.id}`);
+            if (elDom) this.enableInPlaceTextEditing(elDom, el);
+          }
+        };
+      }
+
       document.getElementById('propFontFamily').onchange = (e) => {
         const el = getActiveEl();
         if (el) {

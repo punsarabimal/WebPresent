@@ -1272,39 +1272,64 @@ video.element-inner-media, audio.element-inner-media {
 /* ==========================================================================
    Fullscreen Presentation Mode
    ========================================================================== */
-.presentation-overlay {
-  position: fixed;
-  inset: 0;
-  background: #000000;
-  z-index: 99999;
+.presentation-overlay,
+#presentation-mode,
+#fullscreen-container,
+#presentationOverlay {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   display: none;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  outline: none;
+  background: #000000;
   overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  outline: none;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
-.presentation-overlay.active {
-  display: flex;
+.presentation-overlay.active,
+#presentation-mode.active,
+#fullscreen-container.active,
+#presentationOverlay.active {
+  display: flex !important;
 }
 
 .presentation-viewport {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
 }
 
-.presentation-slide-container {
-  width: var(--canvas-logical-w);
-  height: var(--canvas-logical-h);
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 0 50px rgba(0,0,0,0.8);
-  transform-origin: center center;
-  transition: transform 0.4s ease, opacity 0.4s ease;
+.presentation-slide-container,
+#presentationSlideContainer {
+  width: 1920px !important;
+  height: 1080px !important;
+  min-width: 1920px !important;
+  min-height: 1080px !important;
+  max-width: 1920px !important;
+  max-height: 1080px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+  transform-origin: center center !important;
+  margin: auto !important;
+  transition: opacity 0.3s ease;
 }
 
 /* Presenter Laser */

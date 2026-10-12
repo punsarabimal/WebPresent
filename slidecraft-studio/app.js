@@ -2381,15 +2381,38 @@
           this.fitCanvasToViewport();
         }
         if (this.isPresentationActive) {
-          this.renderPresentationSlide();
+          this.updatePresentationScale();
         }
       });
 
-      document.addEventListener('fullscreenchange', () => {
+      window.addEventListener('orientationchange', () => {
         if (this.isPresentationActive) {
-          this.renderPresentationSlide();
+          setTimeout(() => this.updatePresentationScale(), 100);
         }
       });
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+          if (this.isPresentationActive) {
+            this.updatePresentationScale();
+          }
+        });
+      }
+
+      const onFullscreenChange = () => {
+        if (this.isPresentationActive) {
+          this.updatePresentationScale();
+          setTimeout(() => this.updatePresentationScale(), 100);
+          setTimeout(() => this.updatePresentationScale(), 300);
+        } else {
+          setTimeout(() => {
+            if (this.autoFitZoom) this.fitCanvasToViewport();
+          }, 100);
+        }
+      };
+
+      document.addEventListener('fullscreenchange', onFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     }
 
     fitCanvasToViewport() {
@@ -2965,28 +2988,43 @@
       this.presentationStep = 0;
       this.presentationLaserActive = false;
 
-      const overlay = document.getElementById('presentationOverlay');
+      const overlay = document.getElementById('presentationOverlay') ||
+                      document.getElementById('presentation-mode') ||
+                      document.getElementById('fullscreen-container');
       if (overlay) {
         overlay.classList.add('active');
         overlay.focus();
       }
 
-      // Try native fullscreen
+      // Try native fullscreen (standard and webkit prefixed)
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
       }
 
       this.renderPresentationSlide();
+      this.updatePresentationScale();
       this.bindPresentationKeys();
+
+      // Recalculate scaling after asynchronous viewport changes & mobile fullscreen transitions
+      requestAnimationFrame(() => this.updatePresentationScale());
+      setTimeout(() => this.updatePresentationScale(), 50);
+      setTimeout(() => this.updatePresentationScale(), 150);
+      setTimeout(() => this.updatePresentationScale(), 350);
     }
 
     exitPresentation() {
       this.isPresentationActive = false;
-      const overlay = document.getElementById('presentationOverlay');
+      const overlay = document.getElementById('presentationOverlay') ||
+                      document.getElementById('presentation-mode') ||
+                      document.getElementById('fullscreen-container');
       if (overlay) overlay.classList.remove('active');
 
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
+      } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
       }
 
       // Stop any running media
@@ -2996,6 +3034,47 @@
           m.pause();
         });
       }
+
+      // Re-fit canvas to viewport when returning to editor mode
+      setTimeout(() => {
+        if (this.autoFitZoom) {
+          this.fitCanvasToViewport();
+        }
+      }, 100);
+    }
+
+    updatePresentationScale() {
+      if (!this.isPresentationActive) return;
+      const container = document.getElementById('presentationSlideContainer');
+      if (!container) return;
+
+      // 1. Strip away conflicting editor constraints & enforce strict logical slide dimensions
+      container.style.width = '1920px';
+      container.style.height = '1080px';
+      container.style.minWidth = '1920px';
+      container.style.minHeight = '1080px';
+      container.style.maxWidth = '1920px';
+      container.style.maxHeight = '1080px';
+      container.style.flexShrink = '0';
+      container.style.flexGrow = '0';
+      container.style.position = 'relative';
+      container.style.top = 'auto';
+      container.style.left = 'auto';
+      container.style.right = 'auto';
+      container.style.bottom = 'auto';
+      container.style.margin = 'auto';
+
+      // 2. Exact scaling factor dynamically based on current window dimensions relative to 1920x1080
+      const winW = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 1920;
+      const winH = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight || 1080;
+
+      const scaleX = winW / 1920;
+      const scaleY = winH / 1080;
+      const scale = Math.min(scaleX, scaleY);
+
+      // 3. Apply this scale with centered origin
+      container.style.transformOrigin = 'center center';
+      container.style.transform = `scale(${scale})`;
     }
 
     renderPresentationSlide() {
@@ -3022,11 +3101,8 @@
       container.style.opacity = '0';
       this.applySlideBackground(container, slide.background);
 
-      // Compute display scale for full screen letterbox
-      const winW = window.innerWidth;
-      const winH = window.innerHeight;
-      const scale = Math.min(winW / CANVAS_WIDTH, winH / CANVAS_HEIGHT);
-      container.style.transform = `scale(${scale})`;
+      // Apply Universal Fullscreen Scaling Engine
+      this.updatePresentationScale();
 
       container.innerHTML = '';
 
