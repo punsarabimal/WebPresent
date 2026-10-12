@@ -935,6 +935,7 @@
 
       // Fullscreen Presentation State
       this.presentationRotated = false;
+      this.presentationFitMode = 'fill';
 
       // Autosave debouncer
       this.autosaveTimeout = null;
@@ -4067,6 +4068,49 @@
     // -----------------------------------------------------------------------
     // FULLSCREEN PRESENTATION MODE
     // -----------------------------------------------------------------------
+    toggleNativeFullscreen(forceEnter = null) {
+      const overlay = document.getElementById('presentation-mode') || document.documentElement;
+      const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      const shouldEnter = forceEnter !== null ? forceEnter : !isFs;
+
+      if (shouldEnter) {
+        const req = overlay.requestFullscreen ||
+                    overlay.webkitRequestFullscreen ||
+                    overlay.mozRequestFullScreen ||
+                    overlay.msRequestFullscreen ||
+                    document.documentElement.requestFullscreen ||
+                    document.documentElement.webkitRequestFullscreen;
+        if (req) {
+          try {
+            const p = req.call(overlay);
+            if (p && p.catch) {
+              p.catch(() => {
+                if (document.documentElement.requestFullscreen) {
+                  document.documentElement.requestFullscreen().catch(() => {});
+                }
+              });
+            }
+          } catch (e) {
+            if (document.documentElement.requestFullscreen) {
+              document.documentElement.requestFullscreen().catch(() => {});
+            }
+          }
+        }
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      }
+    }
+
     startPresentation(fromCurrent = false) {
       if (!this.project || this.project.slides.length === 0) return;
 
@@ -4075,6 +4119,11 @@
       this.presentationStep = 0;
       this.presentationLaserActive = false;
       this.presentationRotated = false;
+
+      // Scroll to absolute top to eliminate mobile address-bar displacement
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
 
       const overlay = document.getElementById('presentation-mode') ||
                       document.getElementById('presentationOverlay') ||
@@ -4085,12 +4134,8 @@
         overlay.focus();
       }
 
-      // Try native fullscreen (standard and webkit prefixed)
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else if (document.documentElement.webkitRequestFullscreen) {
-        document.documentElement.webkitRequestFullscreen();
-      }
+      // Trigger native browser fullscreen
+      this.toggleNativeFullscreen(true);
 
       this.renderPresentationSlide();
       this.updatePresentationScale();
@@ -4101,6 +4146,7 @@
       setTimeout(() => this.updatePresentationScale(), 50);
       setTimeout(() => this.updatePresentationScale(), 150);
       setTimeout(() => this.updatePresentationScale(), 350);
+      setTimeout(() => this.updatePresentationScale(), 600);
     }
 
     exitPresentation() {
@@ -4114,11 +4160,7 @@
         overlay.classList.remove('blackout-active');
       }
 
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-      }
+      this.toggleNativeFullscreen(false);
 
       // Stop any running media
       const container = document.getElementById('presentationSlideContainer');
@@ -4163,10 +4205,13 @@
       if (availW <= 0 || availH <= 0) return;
 
       const isPortrait = availW < availH;
+      const isFill = this.presentationFitMode === 'fill';
 
       if (this.presentationRotated && isPortrait) {
         // Rotated 90 degrees in portrait to maximize screen utilization
-        const scale = Math.min(availW / 1080, availH / 1920);
+        const scale = isFill
+          ? Math.max(availW / 1080, availH / 1920)
+          : Math.min(availW / 1080, availH / 1920);
         const scaledW = Math.round(1080 * scale);
         const scaledH = Math.round(1920 * scale);
 
@@ -4181,8 +4226,11 @@
         container.style.transformOrigin = '0 0';
         container.style.transform = `rotate(90deg) scale(${scale})`;
       } else {
-        // Standard 16:9 presentation (landscape or portrait letterboxed)
-        const scale = Math.min(availW / 1920, availH / 1080);
+        // Standard presentation view
+        // In 'fill' mode, scales to cover the viewport completely with ZERO blank black bars!
+        const scale = isFill
+          ? Math.max(availW / 1920, availH / 1080)
+          : Math.min(availW / 1920, availH / 1080);
         const scaledW = Math.round(1920 * scale);
         const scaledH = Math.round(1080 * scale);
 
@@ -4198,6 +4246,13 @@
         container.style.transform = `scale(${scale})`;
       }
 
+      // Sync Fit/Fill HUD button
+      const btnFitFill = document.getElementById('btnHudFitFill');
+      if (btnFitFill) {
+        btnFitFill.textContent = isFill ? '↕ Fit 16:9' : '↔ Fill Screen';
+        btnFitFill.classList.toggle('active', isFill);
+      }
+
       // Sync rotate HUD button state and visibility
       const btnRot = document.getElementById('btnHudRotate');
       if (btnRot) {
@@ -4208,6 +4263,8 @@
 
     renderPresentationSlide() {
       const container = document.getElementById('presentationSlideContainer');
+      const viewport = document.getElementById('presentationViewport');
+      const overlay = document.getElementById('presentation-mode') || document.getElementById('presentationOverlay');
       const counter = document.getElementById('hudSlideCounter');
       const notesContent = document.getElementById('hudNotesContent');
       if (!container || !this.project) return;
@@ -4229,6 +4286,10 @@
       const transType = (slide.transition && slide.transition.type) || 'fade';
       container.style.opacity = '0';
       this.applySlideBackground(container, slide.background);
+
+      // Blend presentation overlay and viewport background to match slide seamlessly
+      if (overlay) this.applySlideBackground(overlay, slide.background);
+      if (viewport) this.applySlideBackground(viewport, slide.background);
 
       // Apply Universal Fullscreen Scaling Engine
       this.updatePresentationScale();
@@ -4380,10 +4441,13 @@
           this.renderPresentationSlide();
         } else if (e.key === 'Escape') {
           this.exitPresentation();
+        } else if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          this.toggleNativeFullscreen();
         } else if (e.key === 'b' || e.key === 'B') {
           // Black screen toggle
-          overlay.style.backgroundColor =
-            overlay.style.backgroundColor === 'rgb(0, 0, 0)' ? '#111827' : '#000000';
+          const overlayEl = document.getElementById('presentation-mode');
+          if (overlayEl) overlayEl.classList.toggle('blackout-active');
         }
       };
 
@@ -5259,6 +5323,25 @@
           if (overlay) {
             overlay.classList.toggle('blackout-active');
           }
+        };
+      }
+      const btnFs = document.getElementById('btnHudFullscreen');
+      if (btnFs) {
+        btnFs.onclick = () => {
+          this.toggleNativeFullscreen();
+        };
+      }
+      const btnFitFill = document.getElementById('btnHudFitFill');
+      if (btnFitFill) {
+        btnFitFill.onclick = () => {
+          this.presentationFitMode = this.presentationFitMode === 'fill' ? 'fit' : 'fill';
+          this.updatePresentationScale();
+          this.showToast(
+            this.presentationFitMode === 'fill'
+              ? 'Fullscreen Fill enabled (no black bars)'
+              : '16:9 Letterbox Fit enabled',
+            'info'
+          );
         };
       }
 

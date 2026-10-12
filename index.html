@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#000000">
   <title>SlideCraft Studio - Professional Presentation Editor</title>
   <meta name="description" content="A professional PowerPoint-style presentation editor built with HTML5, CSS3, and Vanilla JavaScript with local persistence, transitions, animations, media, and fullscreen presentation.">
   <meta property="og:title" content="SlideCraft Studio - Professional Presentation Editor">
@@ -878,7 +882,9 @@
       <div class="hud-separator"></div>
       <button class="hud-btn" id="btnHudLaser" title="Toggle Laser Pointer">🔴 Pointer</button>
       <button class="hud-btn" id="btnHudNotes" title="Toggle Speaker Notes">📝 Notes</button>
+      <button class="hud-btn" id="btnHudFitFill" title="Toggle Fill Screen (No Black Bars) / Letterbox Fit">↔ Fill Screen</button>
       <button class="hud-btn" id="btnHudRotate" title="Rotate View 90° (Fill Screen)">🔄 Rotate</button>
+      <button class="hud-btn" id="btnHudFullscreen" title="Toggle Native Fullscreen">⛶ Fullscreen</button>
       <button class="hud-btn" id="btnHudBlackout" title="Black Screen (B)">⬛ Blackout</button>
       <button class="hud-btn hud-exit" id="btnHudExit" title="Exit Presentation (Esc)">✕ Exit</button>
     </div>

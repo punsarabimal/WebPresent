@@ -1582,7 +1582,10 @@ video.element-inner-media, audio.element-inner-media {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 99999;
+  right: 0;
+  bottom: 0;
+  inset: 0;
+  z-index: 999999;
   outline: none;
   margin: 0;
   padding: 0;
@@ -1594,6 +1597,15 @@ video.element-inner-media, audio.element-inner-media {
 #fullscreen-container.active,
 #presentationOverlay.active {
   display: flex !important;
+}
+
+#presentation-mode:fullscreen,
+#presentation-mode:-webkit-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  inset: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 #presentation-mode.blackout-active .presentation-viewport {
