@@ -933,6 +933,9 @@
       this.customGuides = { x: [], y: [] };
       this.rulerGuideDrag = null;
 
+      // Fullscreen Presentation State
+      this.presentationRotated = false;
+
       // Autosave debouncer
       this.autosaveTimeout = null;
     }
@@ -4071,11 +4074,13 @@
       this.presentationSlideIndex = fromCurrent ? this.currentSlideIndex : 0;
       this.presentationStep = 0;
       this.presentationLaserActive = false;
+      this.presentationRotated = false;
 
       const overlay = document.getElementById('presentation-mode') ||
                       document.getElementById('presentationOverlay') ||
                       document.getElementById('fullscreen-container');
       if (overlay) {
+        overlay.classList.remove('blackout-active');
         overlay.classList.add('active');
         overlay.focus();
       }
@@ -4100,10 +4105,14 @@
 
     exitPresentation() {
       this.isPresentationActive = false;
+      this.presentationRotated = false;
       const overlay = document.getElementById('presentation-mode') ||
                       document.getElementById('presentationOverlay') ||
                       document.getElementById('fullscreen-container');
-      if (overlay) overlay.classList.remove('active');
+      if (overlay) {
+        overlay.classList.remove('active');
+        overlay.classList.remove('blackout-active');
+      }
 
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
@@ -4130,9 +4139,11 @@
     updatePresentationScale() {
       if (!this.isPresentationActive) return;
       const container = document.getElementById('presentationSlideContainer');
-      if (!container) return;
+      const viewport = document.getElementById('presentationViewport');
+      const overlay = document.getElementById('presentation-mode') || document.getElementById('presentationOverlay');
+      if (!container || !viewport) return;
 
-      // 1. Remove any absolute pixel margins, top offsets, or transform-origin offsets inherited from editor canvas
+      // Ensure 1920x1080 logical slide dimensions
       container.style.width = '1920px';
       container.style.height = '1080px';
       container.style.minWidth = '1920px';
@@ -4141,21 +4152,58 @@
       container.style.maxHeight = '1080px';
       container.style.flexShrink = '0';
       container.style.flexGrow = '0';
-      container.style.position = 'relative';
-      container.style.top = 'auto';
-      container.style.left = 'auto';
-      container.style.right = 'auto';
-      container.style.bottom = 'auto';
-      container.style.margin = 'auto';
 
-      // 2. Dynamic scale calculation based on available viewport width and height
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const scale = Math.min(viewportWidth / 1920, viewportHeight / 1080);
+      // Read real viewport dimensions from overlay container or visualViewport / window
+      let availW = overlay ? overlay.clientWidth : 0;
+      let availH = overlay ? overlay.clientHeight : 0;
+      if (!availW || !availH) {
+        availW = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+        availH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      }
+      if (availW <= 0 || availH <= 0) return;
 
-      // 3. Apply transform: scale(${scale}) and ensure no extra translation/offset transforms exist
-      container.style.transformOrigin = 'center center';
-      container.style.transform = `scale(${scale})`;
+      const isPortrait = availW < availH;
+
+      if (this.presentationRotated && isPortrait) {
+        // Rotated 90 degrees in portrait to maximize screen utilization
+        const scale = Math.min(availW / 1080, availH / 1920);
+        const scaledW = Math.round(1080 * scale);
+        const scaledH = Math.round(1920 * scale);
+
+        viewport.style.width = `${scaledW}px`;
+        viewport.style.height = `${scaledH}px`;
+        viewport.style.margin = 'auto';
+
+        container.style.position = 'absolute';
+        container.style.top = '0';
+        container.style.left = `${scaledW}px`;
+        container.style.margin = '0';
+        container.style.transformOrigin = '0 0';
+        container.style.transform = `rotate(90deg) scale(${scale})`;
+      } else {
+        // Standard 16:9 presentation (landscape or portrait letterboxed)
+        const scale = Math.min(availW / 1920, availH / 1080);
+        const scaledW = Math.round(1920 * scale);
+        const scaledH = Math.round(1080 * scale);
+
+        viewport.style.width = `${scaledW}px`;
+        viewport.style.height = `${scaledH}px`;
+        viewport.style.margin = 'auto';
+
+        container.style.position = 'absolute';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.margin = '0';
+        container.style.transformOrigin = '0 0';
+        container.style.transform = `scale(${scale})`;
+      }
+
+      // Sync rotate HUD button state and visibility
+      const btnRot = document.getElementById('btnHudRotate');
+      if (btnRot) {
+        btnRot.style.display = isPortrait ? 'inline-flex' : 'none';
+        btnRot.classList.toggle('active', this.presentationRotated);
+      }
     }
 
     renderPresentationSlide() {
@@ -5196,6 +5244,23 @@
       document.getElementById('btnCloseHudNotes').onclick = () => {
         document.getElementById('hudNotesPopup').style.display = 'none';
       };
+      const btnRot = document.getElementById('btnHudRotate');
+      if (btnRot) {
+        btnRot.onclick = () => {
+          this.presentationRotated = !this.presentationRotated;
+          this.updatePresentationScale();
+          this.showToast(this.presentationRotated ? 'Landscape view enabled (90° rotated)' : 'Standard view enabled', 'info');
+        };
+      }
+      const btnBlack = document.getElementById('btnHudBlackout');
+      if (btnBlack) {
+        btnBlack.onclick = () => {
+          const overlay = document.getElementById('presentation-mode');
+          if (overlay) {
+            overlay.classList.toggle('blackout-active');
+          }
+        };
+      }
 
       // Zoom Controls
       document.getElementById('btnZoomFit').onclick = () => {
