@@ -3,8 +3,12 @@
  * Pure Vanilla JavaScript (ES6+) - Local-First Presentation Suite
  */
 
-(function () {
-  'use strict';
+import {
+  SlideCraftFileSynchronizer,
+  serializeSlideCraft,
+  parseSlideCraft,
+  SLIDECRAFT_FILE_EXTENSION
+} from './slidecraft-file-sync.js';
 
   // =========================================================================
   // 1. CONSTANTS & SYSTEM CONFIGURATION
@@ -935,10 +939,18 @@
 
       // Fullscreen Presentation State
       this.presentationRotated = false;
-      this.presentationFitMode = 'fill';
-
       // Autosave debouncer
       this.autosaveTimeout = null;
+
+      // Real-Time Local File Synchronizer (.slidecraft & PPTX)
+      this.fileSync = new SlideCraftFileSynchronizer({
+        onStatusChange: (statusInfo) => {
+          this.setSaveStatus(statusInfo.status, statusInfo.text);
+        },
+        onToast: (msg, type) => {
+          this.showToast(msg, type);
+        }
+      });
     }
 
     async init() {
@@ -1038,18 +1050,28 @@
     // AUTOSAVE & PERSISTENCE
     // -----------------------------------------------------------------------
     triggerAutosave() {
-      this.setSaveStatus('unsaved', 'Unsaved changes');
       clearTimeout(this.autosaveTimeout);
+      const isLinked = this.fileSync && this.fileSync.fileName;
+      this.setSaveStatus(
+        'unsaved',
+        isLinked ? `Unsaved (${this.fileSync.fileName})` : 'Unsaved changes'
+      );
+
+      // 500ms debounced auto-save to persistent file handle and IndexedDB
       this.autosaveTimeout = setTimeout(async () => {
         try {
           await this.storage.saveProject(this.project);
-          const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          this.setSaveStatus('saved', `Autosaved ${time}`);
+          if (this.fileSync && this.fileSync.fileHandle) {
+            await this.fileSync.saveToLocalFile(this.project);
+          } else {
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            this.setSaveStatus('saved', `Autosaved ${time}`);
+          }
         } catch (e) {
           console.error('Autosave error:', e);
           this.setSaveStatus('unsaved', 'Autosave failed');
         }
-      }, 1200);
+      }, 500);
     }
 
     setSaveStatus(status, text) {
@@ -4697,19 +4719,79 @@
     }
 
     // -----------------------------------------------------------------------
-    // PROJECT EXPORT & IMPORT (JSON & BUNDLE & PRINT PDF)
+    // REAL-TIME LOCAL FILE SYNCHRONIZATION (.slidecraft) & PPTX EXPORT
     // -----------------------------------------------------------------------
+    async createNewSlideCraftFile() {
+      if (!this.project) return;
+      try {
+        const res = await this.fileSync.createNewSlideCraftFile(this.project.title, this.project);
+        if (res && res.success) {
+          await this.storage.saveProject(this.project);
+        }
+      } catch (err) {
+        console.error('createNewSlideCraftFile error:', err);
+        this.showToast('Failed to link file: ' + err.message, 'error');
+      }
+    }
+
+    async saveToLocalFile(data = null) {
+      const payload = data || this.project;
+      if (!payload) return;
+      try {
+        if (!this.fileSync.fileHandle) {
+          await this.createNewSlideCraftFile();
+        } else {
+          await this.fileSync.saveToLocalFile(payload);
+          await this.storage.saveProject(payload);
+        }
+      } catch (err) {
+        console.error('saveToLocalFile error:', err);
+        this.showToast('Failed to save: ' + err.message, 'error');
+      }
+    }
+
+    async openSlideCraftFile() {
+      try {
+        const res = await this.fileSync.openSlideCraftFile();
+        if (res && res.success && res.project) {
+          this.project = res.project;
+          this.currentSlideIndex = 0;
+          this.selectedElementIds = [];
+          this.cacheInitialHistory();
+          await this.storage.saveProject(this.project);
+          this.renderAll();
+          const titleInput = document.getElementById('projectTitleInput');
+          if (titleInput) titleInput.value = this.project.title || 'Untitled';
+          this.showToast(`Loaded "${res.name}"`, 'success');
+        }
+      } catch (err) {
+        console.error('openSlideCraftFile error:', err);
+        this.showToast('Failed to open file: ' + err.message, 'error');
+      }
+    }
+
+    async exportToPowerPoint() {
+      if (!this.project) return;
+      try {
+        await this.fileSync.exportToPowerPoint(this.project);
+      } catch (err) {
+        console.error('exportToPowerPoint error:', err);
+        this.showToast('PowerPoint export failed: ' + err.message, 'error');
+      }
+    }
+
     exportProjectJson() {
       if (!this.project) return;
       const dataStr =
-        'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(this.project, null, 2));
+        'data:application/x-slidecraft+json;charset=utf-8,' +
+        encodeURIComponent(serializeSlideCraft(this.project));
       const a = document.createElement('a');
       a.href = dataStr;
       a.download = `${(this.project.title || 'presentation')
         .toLowerCase()
-        .replace(/\s+/g, '_')}.json`;
+        .replace(/[^a-z0-9_-]/g, '_')}${SLIDECRAFT_FILE_EXTENSION}`;
       a.click();
-      this.showToast('Exported presentation JSON', 'success');
+      this.showToast('Exported presentation .slidecraft file', 'success');
     }
 
     async exportProjectBundle() {
@@ -4908,10 +4990,49 @@
         };
       }
 
+      const btnNewSlideCraft = document.getElementById('btnNewSlideCraft');
+      if (btnNewSlideCraft) {
+        btnNewSlideCraft.onclick = () => this.createNewSlideCraftFile();
+      }
+
+      const btnOpenSlideCraft = document.getElementById('btnOpenSlideCraft');
+      if (btnOpenSlideCraft) {
+        btnOpenSlideCraft.onclick = () => this.openSlideCraftFile();
+      }
+
+      const btnOpenLocalMgr = document.getElementById('btnOpenLocalSlideCraftFromManager');
+      if (btnOpenLocalMgr) {
+        btnOpenLocalMgr.onclick = () => {
+          this.openSlideCraftFile();
+          const mgr = document.getElementById('modalProjectManager');
+          if (mgr) mgr.style.display = 'none';
+        };
+      }
+
+      const btnExportPptx = document.getElementById('btnExportPptx');
+      if (btnExportPptx) {
+        btnExportPptx.onclick = () => this.exportToPowerPoint();
+      }
+
+      const saveInd = document.getElementById('saveIndicator');
+      if (saveInd) {
+        saveInd.onclick = () => {
+          if (!this.fileSync.fileHandle) {
+            this.createNewSlideCraftFile();
+          } else {
+            this.saveToLocalFile();
+          }
+        };
+      }
+
       document.getElementById('btnSave').onclick = async () => {
         await this.storage.saveProject(this.project);
-        this.setSaveStatus('saved', 'Saved to browser');
-        this.showToast('Presentation saved to browser storage', 'success');
+        if (this.fileSync && this.fileSync.fileHandle) {
+          await this.fileSync.saveToLocalFile(this.project);
+        } else {
+          this.setSaveStatus('saved', 'Saved to browser');
+          this.showToast('Presentation saved to browser storage', 'success');
+        }
       };
 
       const btnSaveAsCopy = document.getElementById('btnSaveAsCopy');
@@ -5913,4 +6034,3 @@
   } else {
     bootstrapApp();
   }
-})();

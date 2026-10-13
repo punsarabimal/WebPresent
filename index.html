@@ -54,11 +54,14 @@
           <button class="dropdown-item" id="btnNewProject"><span class="item-icon">📄</span> New Presentation <kbd>Ctrl+N</kbd></button>
           <button class="dropdown-item" id="btnOpenProjectManager"><span class="item-icon">📂</span> Open / Projects Manager...</button>
           <hr class="dropdown-divider">
-          <button class="dropdown-item" id="btnSave"><span class="item-icon">💾</span> Save to Browser <kbd>Ctrl+S</kbd></button>
+          <button class="dropdown-item" id="btnNewSlideCraft"><span class="item-icon">💾</span> Link & Save Local File (.slidecraft)...</button>
+          <button class="dropdown-item" id="btnOpenSlideCraft"><span class="item-icon">📂</span> Open Local File (.slidecraft)...</button>
+          <button class="dropdown-item" id="btnSave"><span class="item-icon">☁️</span> Save to Browser Storage <kbd>Ctrl+S</kbd></button>
           <button class="dropdown-item" id="btnSaveAsCopy"><span class="item-icon">📑</span> Save As Copy...</button>
           <hr class="dropdown-divider">
-          <button class="dropdown-item" id="btnImportJson"><span class="item-icon">📥</span> Import Project (.json)...</button>
-          <button class="dropdown-item" id="btnExportJson"><span class="item-icon">📤</span> Export Project JSON</button>
+          <button class="dropdown-item" id="btnExportPptx"><span class="item-icon">📊</span> Export to PowerPoint (.pptx)</button>
+          <button class="dropdown-item" id="btnImportJson"><span class="item-icon">📥</span> Import File (.slidecraft / .json)...</button>
+          <button class="dropdown-item" id="btnExportJson"><span class="item-icon">📤</span> Export .slidecraft JSON</button>
           <button class="dropdown-item" id="btnExportBundle"><span class="item-icon">📦</span> Export Bundle (with Media)</button>
           <hr class="dropdown-divider">
           <button class="dropdown-item" id="btnPrintPdf"><span class="item-icon">🖨️</span> Print / Save to PDF <kbd>Ctrl+P</kbd></button>
@@ -1067,6 +1070,7 @@
       <div class="modal-body">
         <div class="project-manager-actions">
           <button class="btn-primary" id="btnCreateNewProjectFromManager">➕ Create New Presentation</button>
+          <button class="btn-secondary" id="btnOpenLocalSlideCraftFromManager">📂 Open .slidecraft File</button>
           <button class="btn-secondary" id="btnImportProjectFileFromManager">📥 Import Project (.json)</button>
         </div>
         <div class="projects-list-container" id="projectsManagerList">
